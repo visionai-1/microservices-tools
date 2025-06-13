@@ -1,0 +1,27 @@
+{
+  "name": "utils",
+  "version": "1.0.0",
+  "description": "Shared utils library for Node.js microservices",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "utils",
+    "typescript",
+    "nodejs",
+    "shared",
+    "microservices"
+  ],
+  "author": "dan visionai-1",
+  "license": "MIT",
+  "dependencies": {
+    "winston": "^3.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/winston": "^2.4.4",
+    "typescript": "^5.4.0"
+  }
+}
