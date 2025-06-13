@@ -1,5 +1,5 @@
 {
-  "name": "utils",
+  "name": "shared",
   "version": "1.0.0",
   "description": "Shared utils library for Node.js microservices",
   "main": "dist/index.js",
