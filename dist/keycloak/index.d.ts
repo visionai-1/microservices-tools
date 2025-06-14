@@ -1,2 +1,3 @@
-export * from './keycloak.service';
-export * from './auth.middleware';
+export { KeycloakService } from './keycloak.service';
+export type { KeycloakConfig, UserInfo } from './keycloak.service';
+export { authMiddleware } from './auth.middleware';
