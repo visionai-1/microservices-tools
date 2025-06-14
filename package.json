@@ -17,6 +17,11 @@
   "author": "dan visionai-1",
   "license": "MIT",
   "dependencies": {
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.9",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "keycloak-connect": "^26.1.1",
     "winston": "^3.14.0"
   },
   "devDependencies": {
