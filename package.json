@@ -1,7 +1,7 @@
 {
-  "name": "shared",
+  "name": "microservices-tools",
   "version": "1.0.0",
-  "description": "Shared utils library for Node.js microservices",
+  "description": "Tools library for Node.js microservices",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
