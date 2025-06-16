@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createConsumer = void 0;
 const amqp = __importStar(require("amqplib"));
 const createConsumer = async (config, options = {}) => {
-    const { maxReconnectAttempts = 5, reconnectDelay = 5000, maxRetries = 3, retryDelay = 1000, deadLetterExchange = `${config.exchange}.dlx`, deadLetterQueue = `${config.queueName}.dlq` } = options;
+    const { maxReconnectAttempts = 5, reconnectDelay = 5000, maxRetries = 3, deadLetterExchange = `${config.exchange}.dlx`, deadLetterQueue = `${config.queueName}.dlq` } = options;
     let connection = null;
     let channel = null;
     let reconnectAttempts = 0;

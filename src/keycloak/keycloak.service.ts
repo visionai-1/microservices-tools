@@ -1,5 +1,6 @@
 import Keycloak from 'keycloak-connect';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { Logging } from '../logging';
 
 export interface KeycloakConfig {
   realm: string;
@@ -55,6 +56,9 @@ export class KeycloakService {
     try {
       const decoded = jwt.decode(token, { complete: true });
       if (!decoded || typeof decoded.payload === 'string') {
+        Logging.security('Invalid token format', {
+          error: 'Token could not be decoded'
+        });
         throw new Error('Invalid token');
       }
 
@@ -63,6 +67,9 @@ export class KeycloakService {
       // Verify the token with Keycloak
       const verified = await this.keycloak.grantManager.validateToken(token as any);
       if (!verified) {
+        Logging.security('Token validation failed', {
+          userId: payload.sub
+        });
         throw new Error('Token validation failed');
       }
 
@@ -79,8 +86,13 @@ export class KeycloakService {
       return userInfo;
     } catch (error: unknown) {
       if (error instanceof Error) {
+        Logging.error('Token verification failed', {
+          error: error.message,
+          stack: error.stack
+        });
         throw new Error(`Token verification failed: ${error.message}`);
       }
+      Logging.error('Token verification failed with unknown error');
       throw new Error('Token verification failed: Unknown error');
     }
   }

@@ -7,7 +7,6 @@ interface ConsumerOptions {
     maxReconnectAttempts?: number;
     reconnectDelay?: number;
     maxRetries?: number;
-    retryDelay?: number;
     deadLetterExchange?: string;
     deadLetterQueue?: string;
 }

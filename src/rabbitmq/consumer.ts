@@ -10,7 +10,6 @@ interface ConsumerOptions {
   maxReconnectAttempts?: number;
   reconnectDelay?: number;
   maxRetries?: number;
-  retryDelay?: number;
   deadLetterExchange?: string;
   deadLetterQueue?: string;
 }
@@ -23,7 +22,6 @@ export const createConsumer = async (
     maxReconnectAttempts = 5,
     reconnectDelay = 5000,
     maxRetries = 3,
-    retryDelay = 1000,
     deadLetterExchange = `${config.exchange}.dlx`,
     deadLetterQueue = `${config.queueName}.dlq`
   } = options;
