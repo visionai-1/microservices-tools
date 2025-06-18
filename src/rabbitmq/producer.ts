@@ -1,5 +1,6 @@
 import * as amqp from 'amqplib';
 import { RabbitMQConfig, EventMessage } from './types';
+import { Logging } from '../logging';
 
 export interface Producer {
   publish: <T>(routingKey: string, message: EventMessage<T>) => Promise<boolean>;
@@ -28,12 +29,12 @@ export const createProducer = async (config: RabbitMQConfig): Promise<Producer> 
 
   // Handle connection close
   connection.on('close', () => {
-    console.warn('Producer connection closed');
+    Logging.error('Producer connection closed');
   });
 
   // Handle errors
   connection.on('error', (err) => {
-    console.error('Producer connection error:', err);
+    Logging.error('Producer connection error', { error: err.message });
   });
 
   const validateMessage = <T>(message: EventMessage<T>): void => {
@@ -61,6 +62,12 @@ export const createProducer = async (config: RabbitMQConfig): Promise<Producer> 
 
     let attempts = 0;
     let lastError: Error | null = null;
+
+    Logging.debug('Starting message publish', {
+      type: message.type,
+      routingKey,
+      attempt: attempts + 1
+    });
 
     while (attempts < retries) {
       try {
@@ -98,17 +105,37 @@ export const createProducer = async (config: RabbitMQConfig): Promise<Producer> 
         });
 
         // Race between publish and timeout
-        return await Promise.race([publishPromise, timeoutPromise]);
+        const result = await Promise.race([publishPromise, timeoutPromise]);
+        
+        Logging.info('Message published successfully', {
+          type: message.type,
+          routingKey,
+          attempt: attempts + 1
+        });
+
+        return result;
       } catch (error) {
         lastError = error as Error;
         attempts++;
         
         if (attempts < retries) {
-          console.warn(`Publish attempt ${attempts} failed, retrying in ${retryDelay}ms...`);
+          Logging.warn('Publish attempt failed, retrying', {
+            type: message.type,
+            routingKey,
+            attempt: attempts,
+            error: lastError.message
+          });
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
       }
     }
+
+    Logging.error('Failed to publish message after all attempts', {
+      type: message.type,
+      routingKey,
+      attempts,
+      error: lastError?.message
+    });
 
     throw new Error(`Failed to publish message after ${retries} attempts: ${lastError?.message}`);
   };
@@ -133,7 +160,7 @@ export const createProducer = async (config: RabbitMQConfig): Promise<Producer> 
           await connection.close();
         }
       } catch (error) {
-        console.error('Error closing producer:', error);
+        Logging.error('Error closing producer', { error: (error as Error).message });
         throw error;
       }
     }
