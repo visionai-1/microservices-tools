@@ -17,6 +17,7 @@
   "author": "dan visionai-1",
   "license": "MIT",
   "dependencies": {
+    "@keycloak/keycloak-admin-client": "^26.2.5",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.9",
     "amqplib": "^0.10.3",

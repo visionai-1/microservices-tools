@@ -3,6 +3,10 @@ export { default as RabbitMQService } from './rabbitmq';
 export { 
     KeycloakConfig,
     UserInfo,
-    authMiddleware,
+    authenticateKeycloak,
+    authorizeKeycloak,
+    initializeKeycloak,
     KeycloakService,
-} from './keycloak';
+    AdminKeycloakUser,
+    AdminTokenResponse,
+} from './keycloak/index';

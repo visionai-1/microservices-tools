@@ -1,68 +1,114 @@
 import { Request, Response, NextFunction } from 'express';
-import { KeycloakService, UserInfo } from './keycloak.service';
+import { KeycloakService, UserInfo, KeycloakConfig } from './keycloak.service';
 import { Logging } from '../logging';
 
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: UserInfo;
     }
   }
 }
 
-export const authMiddleware = (requiredRoles?: string[]) => {
+// Helper function to extract and validate token
+const extractToken = (req: Request): string | null => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    Logging.security('Unauthorized access attempt - no token', {
+      ip: req.ip,
+      path: req.path
+    });
+    return null;
+  }
+  return authHeader.split(' ')[1];
+};
+
+// Helper function to get KeycloakService instance
+const getKeycloakService = (): KeycloakService | null => {
+  const keycloakService = KeycloakService.getInstance();
+  if (!keycloakService) {
+    Logging.error('KeycloakService not initialized');
+    return null;
+  }
+  return keycloakService;
+};
+
+// Helper function to handle authentication errors
+const handleAuthError = (error: unknown, req: Request, res: Response): void => {
+  if (error instanceof Error && error.message.includes('Token validation failed')) {
+    Logging.security('Invalid token', {
+      path: req.path,
+      error: error.message
+    });
+    res.status(401).json({ error: 'Invalid token' });
+    return;
+  }
+
+  Logging.error('Authentication error', {
+    path: req.path,
+    error: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined
+  });
+  
+  res.status(500).json({ error: 'Internal server error' });
+};
+
+// Authentication middleware - only verifies token and extracts user info
+export const authenticateKeycloak = () => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        Logging.security('Unauthorized access attempt', {
-          ip: req.ip,
-          path: req.path
-        });
+      const token = extractToken(req);
+      if (!token) {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const token = authHeader.split(' ')[1];
-      const keycloakService = KeycloakService.getInstance();
-
+      const keycloakService = getKeycloakService();
       if (!keycloakService) {
-        Logging.error('KeycloakService not initialized', {
-          path: req.path
-        });
-        throw new Error('KeycloakService not initialized');
+        return res.status(500).json({ error: 'Authentication service not available' });
       }
 
       const userInfo: UserInfo = await keycloakService.verifyToken(token);
+      req.user = userInfo;
+      next();
+    } catch (error: unknown) {
+      handleAuthError(error, req, res);
+    }
+  };
+};
 
-      // Check if user has required roles
-      if (!keycloakService.hasRequiredRoles(userInfo, requiredRoles || [])) {
+// Authorization middleware - checks if user has required roles
+export const authorizeKeycloak = (requiredRoles?: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        Logging.security('Authorization attempted without authentication', {
+          path: req.path
+        });
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const keycloakService = getKeycloakService();
+      if (!keycloakService) {
+        return res.status(500).json({ error: 'Authorization service not available' });
+      }
+
+      if (!keycloakService.hasRequiredRoles(req.user, requiredRoles || [])) {
         Logging.security('Access denied - insufficient permissions', {
-          userId: userInfo.sub,
+          userId: req.user.sub,
           path: req.path,
-          requiredRoles
+          requiredRoles,
+          userRoles: [...(req.user.roles || []), ...(req.user.permissions || [])]
         });
         return res.status(403).json({ error: 'Insufficient permissions' });
       }
 
-      // Attach user info to request
-      req.user = userInfo;
       next();
     } catch (error: unknown) {
-      if (error instanceof Error && error.message.includes('Token validation failed')) {
-        Logging.security('Invalid token', {
-          path: req.path,
-          error: error.message
-        });
-        return res.status(401).json({ error: 'Invalid token' });
-      }
-
-      Logging.error('Authentication error', {
+      Logging.error('Authorization error', {
         path: req.path,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
-      return res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   };
 }; 
