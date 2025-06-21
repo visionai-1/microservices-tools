@@ -24,4 +24,6 @@ export declare class KeycloakService {
     verifyToken(token: string): Promise<UserInfo>;
     hasRequiredRoles(userInfo: UserInfo, requiredRoles: string[]): boolean;
     getUserInfo(token: string): Promise<UserInfo>;
+    validateAccessTokenScope(token: string, scope: string): boolean;
+    extractRoles(token: string): string[];
 }

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { KeycloakService } from './keycloak.service';
+import { KeycloakService, UserInfo } from './keycloak.service';
 import { Logging } from '../logging';
 
 declare global {
@@ -32,7 +32,7 @@ export const authMiddleware = (requiredRoles?: string[]) => {
         throw new Error('KeycloakService not initialized');
       }
 
-      const userInfo = await keycloakService.verifyToken(token);
+      const userInfo: UserInfo = await keycloakService.verifyToken(token);
 
       // Check if user has required roles
       if (!keycloakService.hasRequiredRoles(userInfo, requiredRoles || [])) {

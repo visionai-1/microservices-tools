@@ -1,2 +1,3 @@
 export { Logging } from './logging';
-export * from './rabbitmq';
+export { default as RabbitMQService } from './rabbitmq';
+export * from './keycloak';

@@ -109,4 +109,18 @@ export class KeycloakService {
   public async getUserInfo(token: string): Promise<UserInfo> {
     return this.verifyToken(token);
   }
+
+  public validateAccessTokenScope(token: string, scope: string): boolean {
+    const decoded = jwt.decode(token) as ExtendedJwtPayload;
+    return decoded?.realm_access?.roles?.includes(scope) ?? false;
+  }
+
+  public extractRoles(token: string): string[] {
+    const decoded = jwt.decode(token) as ExtendedJwtPayload;
+    return [
+      ...(decoded?.realm_access?.roles || []),
+      ...(decoded?.resource_access?.[this.config.resource]?.roles || [])
+    ];
+  }
+  
 } 

@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createProducer = void 0;
 const amqp = __importStar(require("amqplib"));
+const logging_1 = require("../logging");
 const createProducer = async (config) => {
     const connection = await amqp.connect(config.uri);
     const channel = await connection.createChannel();
@@ -48,11 +49,11 @@ const createProducer = async (config) => {
     });
     // Handle connection close
     connection.on('close', () => {
-        console.warn('Producer connection closed');
+        logging_1.Logging.error('Producer connection closed');
     });
     // Handle errors
     connection.on('error', (err) => {
-        console.error('Producer connection error:', err);
+        logging_1.Logging.error('Producer connection error', { error: err.message });
     });
     const validateMessage = (message) => {
         if (!message.type) {
@@ -69,6 +70,11 @@ const createProducer = async (config) => {
         const { retries = 3, retryDelay = 1000, timeout = 5000 } = options;
         let attempts = 0;
         let lastError = null;
+        logging_1.Logging.debug('Starting message publish', {
+            type: message.type,
+            routingKey,
+            attempt: attempts + 1
+        });
         while (attempts < retries) {
             try {
                 // Validate message before publishing
@@ -96,17 +102,34 @@ const createProducer = async (config) => {
                     setTimeout(() => reject(new Error('Publish timeout')), timeout);
                 });
                 // Race between publish and timeout
-                return await Promise.race([publishPromise, timeoutPromise]);
+                const result = await Promise.race([publishPromise, timeoutPromise]);
+                logging_1.Logging.info('Message published successfully', {
+                    type: message.type,
+                    routingKey,
+                    attempt: attempts + 1
+                });
+                return result;
             }
             catch (error) {
                 lastError = error;
                 attempts++;
                 if (attempts < retries) {
-                    console.warn(`Publish attempt ${attempts} failed, retrying in ${retryDelay}ms...`);
+                    logging_1.Logging.warn('Publish attempt failed, retrying', {
+                        type: message.type,
+                        routingKey,
+                        attempt: attempts,
+                        error: lastError.message
+                    });
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
                 }
             }
         }
+        logging_1.Logging.error('Failed to publish message after all attempts', {
+            type: message.type,
+            routingKey,
+            attempts,
+            error: lastError === null || lastError === void 0 ? void 0 : lastError.message
+        });
         throw new Error(`Failed to publish message after ${retries} attempts: ${lastError === null || lastError === void 0 ? void 0 : lastError.message}`);
     };
     return {
@@ -126,7 +149,7 @@ const createProducer = async (config) => {
                 }
             }
             catch (error) {
-                console.error('Error closing producer:', error);
+                logging_1.Logging.error('Error closing producer', { error: error.message });
                 throw error;
             }
         }
