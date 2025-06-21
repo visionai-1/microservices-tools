@@ -79,9 +79,6 @@ class RabbitMQService {
     static getConfig() {
         return this.config;
     }
-    static isConnected() {
-        return this.producer !== null || this.consumer !== null;
-    }
 }
 RabbitMQService.producer = null;
 RabbitMQService.consumer = null;

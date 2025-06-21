@@ -1,3 +1,8 @@
 export { Logging } from './logging';
 export { default as RabbitMQService } from './rabbitmq';
-export * from './keycloak';
+export { 
+    KeycloakConfig,
+    UserInfo,
+    authMiddleware,
+    KeycloakService,
+} from './keycloak';

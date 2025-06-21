@@ -21,6 +21,5 @@ declare class RabbitMQService {
     static close(): Promise<void>;
     static getInitializationStatus(): boolean;
     static getConfig(): RabbitMQConfig | null;
-    static isConnected(): boolean;
 }
 export default RabbitMQService;
