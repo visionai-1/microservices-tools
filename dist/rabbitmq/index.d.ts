@@ -23,3 +23,32 @@ declare class RabbitMQService {
     static getConfig(): RabbitMQConfig | null;
 }
 export default RabbitMQService;
+/**
+ * Initialize RabbitMQ from environment variables
+ * This should be called once at microservice startup
+ *
+ * Required environment variables:
+ * - RABBITMQ_URI (e.g., "amqp://username:password@localhost:5672")
+ * - RABBITMQ_EXCHANGE (e.g., "events")
+ * - RABBITMQ_QUEUE_NAME (e.g., "user-service-queue")
+ *
+ * Optional environment variables:
+ * - RABBITMQ_EXCHANGE_TYPE (defaults to 'topic')
+ * - RABBITMQ_PREFETCH (defaults to undefined)
+ * - RABBITMQ_MAX_RECONNECT_ATTEMPTS (defaults to undefined)
+ * - RABBITMQ_RECONNECT_DELAY (defaults to undefined)
+ *
+ * @returns void
+ * @throws Error if required environment variables are missing
+ */
+export declare const initRabbitMq: () => void;
+/**
+ * Check if all required RabbitMQ environment variables are set
+ * @returns true if all required env vars are present, false otherwise
+ */
+export declare const validateRabbitMQEnv: () => boolean;
+/**
+ * List missing required RabbitMQ environment variables
+ * @returns Array of missing environment variable names
+ */
+export declare const getMissingRabbitMQEnvVars: () => string[];

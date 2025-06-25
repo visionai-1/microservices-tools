@@ -1,25 +1,19 @@
-import { KeycloakConnectClient } from './keycloak-connect.client';
-import { KeycloakAdminClient } from './keycloak-admin.client';
-import { UserInfo, AdminKeycloakUser, AdminTokenResponse, UserSearchParams } from './types';
-export declare class KeycloakService {
+import KcAdminClient from '@keycloak/keycloak-admin-client';
+import { KeycloakAdminConfig, AdminKeycloakUser, AdminTokenResponse, UserSearchParams } from './types';
+export declare class KeycloakAdminClient {
     private static instance;
-    private connectClient;
     private adminClient;
+    private config;
     private constructor();
-    static getInstance(): KeycloakService;
+    static getInstance(config?: KeycloakAdminConfig): KeycloakAdminClient;
     /**
      * Create configuration from environment variables
      */
     private static createConfigFromEnv;
-    verifyToken(token: string): Promise<UserInfo>;
-    hasRequiredRoles(userInfo: UserInfo, requiredRoles: string[]): boolean;
-    getUserInfo(token: string): Promise<UserInfo>;
-    validateAccessTokenScope(token: string, scope: string): boolean;
-    extractRoles(token: string): string[];
     /**
-     * Check if admin functionality is available
+     * Authenticate admin client
      */
-    private checkAdminAvailable;
+    private authenticateAdminClient;
     /**
      * Get admin access token
      */
@@ -65,15 +59,11 @@ export declare class KeycloakService {
      */
     assignRolesToUser(userId: string, roles: any[]): Promise<void>;
     /**
-     * Check if admin functionality is enabled
+     * Get the underlying admin client instance
      */
-    isAdminEnabled(): boolean;
+    getAdminClientInstance(): KcAdminClient;
     /**
-     * Get the connect client instance
+     * Get the configuration
      */
-    getConnectClient(): KeycloakConnectClient;
-    /**
-     * Get the admin client instance
-     */
-    getAdminClient(): KeycloakAdminClient | null;
+    getConfig(): KeycloakAdminConfig;
 }

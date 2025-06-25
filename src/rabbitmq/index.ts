@@ -98,3 +98,100 @@ class RabbitMQService {
 
 // Export the singleton instance as default export
 export default RabbitMQService;
+
+// ==================== ENVIRONMENT-BASED INITIALIZATION ====================
+/**
+ * Create RabbitMQ configuration from environment variables
+ */
+function createRabbitMQConfigFromEnv(): RabbitMQConfig | null {
+  const uri = process.env.RABBITMQ_URI;
+  const exchange = process.env.RABBITMQ_EXCHANGE;
+  const exchangeType = process.env.RABBITMQ_EXCHANGE_TYPE as 'topic' | 'direct' | 'fanout' | 'headers';
+  const queueName = process.env.RABBITMQ_QUEUE_NAME;
+  const prefetch = process.env.RABBITMQ_PREFETCH;
+
+  if (!uri || !exchange || !queueName) {
+    console.warn('Missing required RabbitMQ environment variables', {
+      uri: !!uri,
+      exchange: !!exchange,
+      queueName: !!queueName
+    });
+    return null;
+  }
+
+  return {
+    uri,
+    exchange,
+    exchangeType: exchangeType || 'topic',
+    queueName,
+    prefetch: prefetch ? parseInt(prefetch) : undefined,
+  };
+}
+
+/**
+ * Initialize RabbitMQ from environment variables
+ * This should be called once at microservice startup
+ * 
+ * Required environment variables:
+ * - RABBITMQ_URI (e.g., "amqp://username:password@localhost:5672")
+ * - RABBITMQ_EXCHANGE (e.g., "events")
+ * - RABBITMQ_QUEUE_NAME (e.g., "user-service-queue")
+ * 
+ * Optional environment variables:
+ * - RABBITMQ_EXCHANGE_TYPE (defaults to 'topic')
+ * - RABBITMQ_PREFETCH (defaults to undefined)
+ * - RABBITMQ_MAX_RECONNECT_ATTEMPTS (defaults to undefined)
+ * - RABBITMQ_RECONNECT_DELAY (defaults to undefined)
+ * 
+ * @returns void
+ * @throws Error if required environment variables are missing
+ */
+export const initRabbitMq = (): void => {
+  const config = createRabbitMQConfigFromEnv();
+  if (!config) {
+    throw new Error('RabbitMQ initialization failed. Please ensure all required environment variables are set.');
+  }
+
+  const maxReconnectAttempts = process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS 
+    ? parseInt(process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS) 
+    : undefined;
+  
+  const reconnectDelay = process.env.RABBITMQ_RECONNECT_DELAY 
+    ? parseInt(process.env.RABBITMQ_RECONNECT_DELAY) 
+    : undefined;
+
+  const options = {
+    maxReconnectAttempts,
+    reconnectDelay,
+  };
+
+  RabbitMQService.initialize(config, options);
+};
+
+/**
+ * Check if all required RabbitMQ environment variables are set
+ * @returns true if all required env vars are present, false otherwise
+ */
+export const validateRabbitMQEnv = (): boolean => {
+  const required = [
+    'RABBITMQ_URI',
+    'RABBITMQ_EXCHANGE',
+    'RABBITMQ_QUEUE_NAME'
+  ];
+  
+  return required.every(envVar => !!process.env[envVar]);
+};
+
+/**
+ * List missing required RabbitMQ environment variables
+ * @returns Array of missing environment variable names
+ */
+export const getMissingRabbitMQEnvVars = (): string[] => {
+  const required = [
+    'RABBITMQ_URI',
+    'RABBITMQ_EXCHANGE',
+    'RABBITMQ_QUEUE_NAME'
+  ];
+  
+  return required.filter(envVar => !process.env[envVar]);
+};
