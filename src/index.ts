@@ -1,12 +1,30 @@
+// ==================== CORE SERVICES ====================
 export { Logging } from './logging';
-export { default as RabbitMQService } from './rabbitmq';
 export { 
-    KeycloakConfig,
-    UserInfo,
+    default as RabbitMQService,
+    initRabbitMq,
+    validateRabbitMQEnv,
+    getMissingRabbitMQEnvVars
+} from './rabbitmq';
+
+// ==================== KEYCLOAK AUTHENTICATION & AUTHORIZATION ====================
+
+// Main service and initialization
+export { 
+    KeycloakService,
+    initializeKeycloak,
+    validateKeycloakEnv,
+    getMissingKeycloakEnvVars,
     authenticateKeycloak,
     authorizeKeycloak,
-    initializeKeycloak,
-    KeycloakService,
+    KeycloakConnectClient,
+    KeycloakAdminClient,
+    getKeycloakConnectClient,
+    getKeycloakAdminClient,
+    KeycloakConfig,
+    KeycloakConnectConfig,
+    KeycloakAdminConfig,
+    UserInfo,
     AdminKeycloakUser,
     AdminTokenResponse,
-} from './keycloak/index';
+} from './keycloak';

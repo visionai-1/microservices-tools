@@ -1,7 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authorizeKeycloak = exports.authenticateKeycloak = void 0;
+exports.authorizeKeycloak = exports.authenticateKeycloak = exports.getKeycloakAdminClient = exports.getKeycloakConnectClient = exports.getKeycloakService = void 0;
 const keycloak_service_1 = require("./keycloak.service");
+const keycloak_connect_client_1 = require("./keycloak-connect.client");
+const keycloak_admin_client_1 = require("./keycloak-admin.client");
 const logging_1 = require("../logging");
 // Helper function to extract and validate token
 const extractToken = (req) => {
@@ -24,6 +26,17 @@ const getKeycloakService = () => {
     }
     return keycloakService;
 };
+exports.getKeycloakService = getKeycloakService;
+// Helper function to get KeycloakConnectClient instance
+const getKeycloakConnectClient = () => {
+    return keycloak_connect_client_1.KeycloakConnectClient.getInstance();
+};
+exports.getKeycloakConnectClient = getKeycloakConnectClient;
+// Helper function to get KeycloakAdminClient instance
+const getKeycloakAdminClient = () => {
+    return keycloak_admin_client_1.KeycloakAdminClient.getInstance();
+};
+exports.getKeycloakAdminClient = getKeycloakAdminClient;
 // Helper function to handle authentication errors
 const handleAuthError = (error, req, res) => {
     if (error instanceof Error && error.message.includes('Token validation failed')) {
@@ -49,11 +62,11 @@ const authenticateKeycloak = () => {
             if (!token) {
                 return res.status(401).json({ error: 'No token provided' });
             }
-            const keycloakService = getKeycloakService();
-            if (!keycloakService) {
+            const keycloakConnectClient = (0, exports.getKeycloakConnectClient)();
+            if (!keycloakConnectClient) {
                 return res.status(500).json({ error: 'Authentication service not available' });
             }
-            const userInfo = await keycloakService.verifyToken(token);
+            const userInfo = await keycloakConnectClient.verifyToken(token);
             req.user = userInfo;
             next();
         }
@@ -73,11 +86,11 @@ const authorizeKeycloak = (requiredRoles) => {
                 });
                 return res.status(401).json({ error: 'Authentication required' });
             }
-            const keycloakService = getKeycloakService();
-            if (!keycloakService) {
+            const keycloakConnectClient = (0, exports.getKeycloakConnectClient)();
+            if (!keycloakConnectClient) {
                 return res.status(500).json({ error: 'Authorization service not available' });
             }
-            if (!keycloakService.hasRequiredRoles(req.user, requiredRoles || [])) {
+            if (!keycloakConnectClient.hasRequiredRoles(req.user, requiredRoles || [])) {
                 logging_1.Logging.security('Access denied - insufficient permissions', {
                     userId: req.user.sub,
                     path: req.path,

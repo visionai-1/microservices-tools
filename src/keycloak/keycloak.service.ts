@@ -1,158 +1,114 @@
-import Keycloak from 'keycloak-connect';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import KcAdminClient from '@keycloak/keycloak-admin-client';
-import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
+import { KeycloakConnectClient } from './keycloak-connect.client';
+import { KeycloakAdminClient } from './keycloak-admin.client';
 import { Logging } from '../logging';
-
-// Extended configuration interface with optional admin credentials
-export interface KeycloakConfig {
-  realm: string;
-  'auth-server-url': string;
-  'ssl-required': 'external' | 'all' | 'none';
-  resource: string;
-  'public-client'?: boolean;
-  'confidential-port': string | number;
-  'bearer-only'?: boolean;
-  
-  // Admin configuration (optional)
-  adminClientId?: string;
-  adminClientSecret?: string;
-}
-
-export interface UserInfo {
-  sub: string;
-  email?: string;
-  name?: string;
-  preferred_username?: string;
-  roles?: string[];
-  permissions?: string[];
-}
-
-// Use Keycloak's built-in UserRepresentation type
-export type AdminKeycloakUser = UserRepresentation;
-
-export interface AdminTokenResponse {
-  access_token: string;
-  expires_in: number;
-  refresh_expires_in: number;
-  refresh_token: string;
-  token_type: string;
-  'not-before-policy': number;
-  session_state: string;
-  scope: string;
-}
-
-interface ExtendedJwtPayload extends JwtPayload {
-  email?: string;
-  name?: string;
-  preferred_username?: string;
-  realm_access?: {
-    roles: string[];
-  };
-  resource_access?: {
-    [key: string]: {
-      roles: string[];
-    };
-  };
-}
+import {
+  KeycloakConfig,
+  KeycloakConnectConfig,
+  KeycloakAdminConfig,
+  UserInfo,
+  AdminKeycloakUser,
+  AdminTokenResponse,
+  UserSearchParams
+} from './types';
 
 export class KeycloakService {
   private static instance: KeycloakService;
-  private keycloak: Keycloak.Keycloak;
-  private config: KeycloakConfig;
-  private adminClient: KcAdminClient | null = null;
+  private connectClient: KeycloakConnectClient;
+  private adminClient: KeycloakAdminClient | null = null;
 
   private constructor(config: KeycloakConfig) {
-    this.config = config;
-    this.keycloak = new Keycloak({}, config as any);
-    
+    // Initialize connect client
+    const connectConfig: KeycloakConnectConfig = {
+      realm: config.realm,
+      'auth-server-url': config['auth-server-url'],
+      'ssl-required': config['ssl-required'],
+      resource: config.resource,
+      'public-client': config['public-client'],
+      'confidential-port': config['confidential-port'],
+      'bearer-only': config['bearer-only'],
+    };
+    this.connectClient = KeycloakConnectClient.getInstance(connectConfig);
+
     // Initialize admin client if admin credentials are provided
     if (config.adminClientId && config.adminClientSecret) {
-      this.adminClient = new KcAdminClient({
-        baseUrl: config['auth-server-url'],
-        realmName: config.realm,
-      });
+      const adminConfig: KeycloakAdminConfig = {
+        realm: config.realm,
+        'auth-server-url': config['auth-server-url'],
+        adminClientId: config.adminClientId,
+        adminClientSecret: config.adminClientSecret,
+      };
+      this.adminClient = KeycloakAdminClient.getInstance(adminConfig);
     }
   }
 
-  public static getInstance(config?: KeycloakConfig): KeycloakService {
-    if (!KeycloakService.instance && config) {
-      KeycloakService.instance = new KeycloakService(config);
+  public static getInstance(): KeycloakService {
+    if (!KeycloakService.instance) {
+      const envConfig = KeycloakService.createConfigFromEnv();
+      if (envConfig) {
+        KeycloakService.instance = new KeycloakService(envConfig);
+      } else {
+        throw new Error('KeycloakService initialization failed. Please ensure all required environment variables are set.');
+      }
     }
     return KeycloakService.instance;
+  }
+
+  /**
+   * Create configuration from environment variables
+   */
+  private static createConfigFromEnv(): KeycloakConfig | null {
+    const realm = process.env.KEYCLOAK_REALM;
+    const authServerUrl = process.env.KEYCLOAK_AUTH_SERVER_URL;
+    const resource = process.env.KEYCLOAK_RESOURCE;
+    const sslRequired = process.env.KEYCLOAK_SSL_REQUIRED as 'external' | 'all' | 'none';
+    const confidentialPort = process.env.KEYCLOAK_CONFIDENTIAL_PORT;
+    const publicClient = process.env.KEYCLOAK_PUBLIC_CLIENT === 'true';
+    const bearerOnly = process.env.KEYCLOAK_BEARER_ONLY === 'true';
+    const adminClientId = process.env.KEYCLOAK_ADMIN_CLIENT_ID;
+    const adminClientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+
+    if (!realm || !authServerUrl || !resource) {
+      Logging.warn('Missing required Keycloak environment variables', {
+        realm: !!realm,
+        authServerUrl: !!authServerUrl,
+        resource: !!resource
+      });
+      return null;
+    }
+
+    return {
+      realm,
+      'auth-server-url': authServerUrl,
+      'ssl-required': sslRequired || 'external',
+      resource,
+      'public-client': publicClient,
+      'confidential-port': confidentialPort ? parseInt(confidentialPort) : 0,
+      'bearer-only': bearerOnly,
+      adminClientId,
+      adminClientSecret,
+    };
   }
 
   // ==================== AUTHENTICATION METHODS ====================
 
   public async verifyToken(token: string): Promise<UserInfo> {
-    try {
-      const decoded = jwt.decode(token, { complete: true });
-      if (!decoded || typeof decoded.payload === 'string') {
-        Logging.security('Invalid token format', {
-          error: 'Token could not be decoded'
-        });
-        throw new Error('Invalid token');
-      }
-
-      const payload = decoded.payload as ExtendedJwtPayload;
-
-      // Verify the token with Keycloak
-      const verified = await this.keycloak.grantManager.validateToken(token as any);
-      if (!verified) {
-        Logging.security('Token validation failed', {
-          userId: payload.sub
-        });
-        throw new Error('Token validation failed');
-      }
-
-      // Extract user information
-      const userInfo: UserInfo = {
-        sub: payload.sub || '',
-        email: payload.email,
-        name: payload.name,
-        preferred_username: payload.preferred_username,
-        roles: payload.realm_access?.roles,
-        permissions: payload.resource_access?.[this.config.resource]?.roles,
-      };
-
-      return userInfo;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        Logging.error('Token verification failed', {
-          error: error.message,
-          stack: error.stack
-        });
-        throw new Error(`Token verification failed: ${error.message}`);
-      }
-      Logging.error('Token verification failed with unknown error');
-      throw new Error('Token verification failed: Unknown error');
-    }
+    return this.connectClient.verifyToken(token);
   }
 
   public hasRequiredRoles(userInfo: UserInfo, requiredRoles: string[]): boolean {
-    if (!requiredRoles || requiredRoles.length === 0) {
-      return true;
-    }
-
-    const userRoles = [...(userInfo.roles || []), ...(userInfo.permissions || [])];
-    return requiredRoles.some(role => userRoles.includes(role));
+    return this.connectClient.hasRequiredRoles(userInfo, requiredRoles);
   }
 
   public async getUserInfo(token: string): Promise<UserInfo> {
-    return this.verifyToken(token);
+    return this.connectClient.getUserInfo(token);
   }
 
   public validateAccessTokenScope(token: string, scope: string): boolean {
-    const decoded = jwt.decode(token) as ExtendedJwtPayload;
-    return decoded?.realm_access?.roles?.includes(scope) ?? false;
+    return this.connectClient.validateAccessTokenScope(token, scope);
   }
 
   public extractRoles(token: string): string[] {
-    const decoded = jwt.decode(token) as ExtendedJwtPayload;
-    return [
-      ...(decoded?.realm_access?.roles || []),
-      ...(decoded?.resource_access?.[this.config.resource]?.roles || [])
-    ];
+    return this.connectClient.extractRoles(token);
   }
 
   // ==================== ADMIN METHODS ====================
@@ -167,70 +123,11 @@ export class KeycloakService {
   }
 
   /**
-   * Authenticate admin client
-   */
-  private async authenticateAdminClient(): Promise<void> {
-    this.checkAdminAvailable();
-    
-    try {
-      await this.adminClient!.auth({
-        grantType: 'client_credentials',
-        clientId: this.config.adminClientId!,
-        clientSecret: this.config.adminClientSecret!,
-      });
-      
-      Logging.info('Admin client authenticated successfully', {
-        realm: this.config.realm
-      });
-    } catch (error) {
-      Logging.error('Failed to authenticate admin client', {
-        realm: this.config.realm,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error('Failed to authenticate admin client');
-    }
-  }
-
-  /**
    * Get admin access token
    */
   public async getAdminToken(): Promise<AdminTokenResponse> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      // Get the access token from the admin client
-      const token = this.adminClient!.accessToken;
-      
-      if (!token) {
-        throw new Error('No access token available');
-      }
-
-      // Create a response object similar to the original format
-      const tokenResponse: AdminTokenResponse = {
-        access_token: token,
-        expires_in: 300, // Default 5 minutes, adjust as needed
-        refresh_expires_in: 1800, // Default 30 minutes
-        refresh_token: '', // Not available with client credentials
-        token_type: 'Bearer',
-        'not-before-policy': 0,
-        session_state: '',
-        scope: 'admin'
-      };
-
-      Logging.info('Admin token retrieved successfully', {
-        realm: this.config.realm
-      });
-
-      return tokenResponse;
-    } catch (error) {
-      Logging.error('Failed to get admin token', {
-        realm: this.config.realm,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error('Failed to get admin token');
-    }
+    return this.adminClient!.getAdminToken();
   }
 
   /**
@@ -238,35 +135,7 @@ export class KeycloakService {
    */
   public async createUser(user: AdminKeycloakUser): Promise<string> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      const createdUser = await this.adminClient!.users.create({
-        realm: this.config.realm,
-        username: user.username,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        enabled: user.enabled,
-        emailVerified: user.emailVerified,
-        attributes: user.attributes,
-        credentials: user.credentials ? user.credentials : undefined,
-      });
-      
-      Logging.info('User created successfully', {
-        username: user.username,
-        userId: createdUser.id
-      });
-
-      return createdUser.id!;
-    } catch (error) {
-      Logging.error('Failed to create user', {
-        username: user.username,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.createUser(user);
   }
 
   /**
@@ -274,39 +143,7 @@ export class KeycloakService {
    */
   public async getUserByEmail(email: string): Promise<AdminKeycloakUser | null> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      const users = await this.adminClient!.users.find({
-        realm: this.config.realm,
-        email: email,
-        exact: true
-      });
-      
-      if (users.length === 0) {
-        return null;
-      }
-
-      const user = users[0];
-      return {
-        id: user.id,
-        username: user.username!,
-        email: user.email!,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        enabled: user.enabled!,
-        emailVerified: user.emailVerified,
-        attributes: user.attributes,
-        credentials: user.credentials,
-      };
-    } catch (error) {
-      Logging.error('Failed to get user by email', {
-        email,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to get user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.getUserByEmail(email);
   }
 
   /**
@@ -314,36 +151,7 @@ export class KeycloakService {
    */
   public async getUserById(userId: string): Promise<AdminKeycloakUser> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      const user = await this.adminClient!.users.findOne({
-        id: userId
-      });
-
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      return {
-        id: user.id,
-        username: user.username!,
-        email: user.email!,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        enabled: user.enabled!,
-        emailVerified: user.emailVerified,
-        attributes: user.attributes,
-        credentials: user.credentials,
-      };
-    } catch (error) {
-      Logging.error('Failed to get user by ID', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to get user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.getUserById(userId);
   }
 
   /**
@@ -351,25 +159,7 @@ export class KeycloakService {
    */
   public async updateUser(userId: string, userData: Partial<AdminKeycloakUser>): Promise<void> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      await this.adminClient!.users.update(
-        { id: userId },
-        userData
-      );
-      
-      Logging.info('User updated successfully', {
-        userId
-      });
-    } catch (error) {
-      Logging.error('Failed to update user', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to update user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.updateUser(userId, userData);
   }
 
   /**
@@ -377,68 +167,15 @@ export class KeycloakService {
    */
   public async deleteUser(userId: string): Promise<void> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      await this.adminClient!.users.del({
-        realm: this.config.realm,
-        id: userId
-      });
-      
-      Logging.info('User deleted successfully', {
-        userId
-      });
-    } catch (error) {
-      Logging.error('Failed to delete user', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to delete user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.deleteUser(userId);
   }
 
   /**
    * Get all users with optional filtering
    */
-  public async getUsers(params?: {
-    search?: string;
-    username?: string;
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    enabled?: boolean;
-    max?: number;
-    first?: number;
-  }): Promise<AdminKeycloakUser[]> {
+  public async getUsers(params?: UserSearchParams): Promise<AdminKeycloakUser[]> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      const users = await this.adminClient!.users.find({
-        realm: this.config.realm,
-        ...params
-      });
-
-      return users.map(user => ({
-        id: user.id,
-        username: user.username!,
-        email: user.email!,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        enabled: user.enabled!,
-        emailVerified: user.emailVerified,
-        attributes: user.attributes,
-        credentials: user.credentials,
-      }));
-    } catch (error) {
-      Logging.error('Failed to get users', {
-        params,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to get users: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.getUsers(params);
   }
 
   /**
@@ -446,31 +183,7 @@ export class KeycloakService {
    */
   public async resetUserPassword(userId: string, newPassword: string, temporary: boolean = false): Promise<void> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      await this.adminClient!.users.resetPassword({
-        realm: this.config.realm,
-        id: userId,
-        credential: {
-          type: 'password',
-          value: newPassword,
-          temporary: temporary
-        }
-      });
-      
-      Logging.info('User password reset successfully', {
-        userId,
-        temporary
-      });
-    } catch (error) {
-      Logging.error('Failed to reset user password', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to reset password: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.resetUserPassword(userId, newPassword, temporary);
   }
 
   /**
@@ -478,27 +191,7 @@ export class KeycloakService {
    */
   public async setUserEnabled(userId: string, enabled: boolean): Promise<void> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      await this.adminClient!.users.update(
-        { id: userId },
-        { enabled: enabled }
-      );
-      
-      Logging.info('User enabled status updated', {
-        userId,
-        enabled
-      });
-    } catch (error) {
-      Logging.error('Failed to update user enabled status', {
-        userId,
-        enabled,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to update user status: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.setUserEnabled(userId, enabled);
   }
 
   /**
@@ -506,23 +199,7 @@ export class KeycloakService {
    */
   public async getUserRoles(userId: string): Promise<any[]> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      const roles = await this.adminClient!.users.listRealmRoleMappings({
-        realm: this.config.realm,
-        id: userId
-      });
-
-      return roles;
-    } catch (error) {
-      Logging.error('Failed to get user roles', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to get user roles: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.getUserRoles(userId);
   }
 
   /**
@@ -530,27 +207,7 @@ export class KeycloakService {
    */
   public async assignRolesToUser(userId: string, roles: any[]): Promise<void> {
     this.checkAdminAvailable();
-    
-    try {
-      await this.authenticateAdminClient();
-      
-      await this.adminClient!.users.addRealmRoleMappings({
-        realm: this.config.realm,
-        id: userId,
-        roles: roles
-      });
-      
-      Logging.info('Roles assigned to user successfully', {
-        userId,
-        roleCount: roles.length
-      });
-    } catch (error) {
-      Logging.error('Failed to assign roles to user', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error(`Failed to assign roles: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.adminClient!.assignRolesToUser(userId, roles);
   }
 
   /**
@@ -558,5 +215,21 @@ export class KeycloakService {
    */
   public isAdminEnabled(): boolean {
     return this.adminClient !== null;
+  }
+
+  // ==================== UTILITY METHODS ====================
+
+  /**
+   * Get the connect client instance
+   */
+  public getConnectClient(): KeycloakConnectClient {
+    return this.connectClient;
+  }
+
+  /**
+   * Get the admin client instance
+   */
+  public getAdminClient(): KeycloakAdminClient | null {
+    return this.adminClient;
   }
 } 
