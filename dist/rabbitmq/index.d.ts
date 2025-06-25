@@ -13,7 +13,7 @@ declare class RabbitMQService {
     static initialize(config: RabbitMQConfig, options?: {
         maxReconnectAttempts?: number;
         reconnectDelay?: number;
-    }): void;
+    }): Promise<void>;
     static getProducer(): Promise<Producer>;
     static getConsumer(): Promise<Consumer>;
     static publish<T>(routingKey: string, message: EventMessage<T>): Promise<boolean>;
@@ -38,10 +38,10 @@ export default RabbitMQService;
  * - RABBITMQ_MAX_RECONNECT_ATTEMPTS (defaults to undefined)
  * - RABBITMQ_RECONNECT_DELAY (defaults to undefined)
  *
- * @returns void
+ * @returns Promise<void>
  * @throws Error if required environment variables are missing
  */
-export declare const initRabbitMq: () => void;
+export declare const initializeRabbitMq: () => Promise<void>;
 /**
  * Check if all required RabbitMQ environment variables are set
  * @returns true if all required env vars are present, false otherwise

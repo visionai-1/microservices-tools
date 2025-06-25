@@ -20,10 +20,10 @@ async function demonstrateSplitClients() {
     console.log('⚠️  Please set these environment variables (see examples/env.example)\n');
   }
 
-  // 2. Use the main service for authentication
-  console.log('2. Using main service for authentication...');
+  // 2. Initialize and use the main service for authentication
+  console.log('2. Initializing and using main service for authentication...');
   try {
-    const keycloakService = initializeKeycloak(); // Always uses env vars only
+    const keycloakService = await initializeKeycloak(); // Always uses env vars only
     console.log('✅ KeycloakService initialized from environment variables\n');
     const token = 'your-jwt-token-here';
     const userInfo = await keycloakService.verifyToken(token);

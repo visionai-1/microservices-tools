@@ -1,7 +1,7 @@
 import rabbitMQ, { 
   EventMessage, 
   EventType, 
-  initRabbitMq, 
+  initializeRabbitMq, 
   validateRabbitMQEnv, 
   getMissingRabbitMQEnvVars 
 } from '../src/rabbitmq';
@@ -33,7 +33,7 @@ async function demonstrateEnvironmentInit() {
   // 2. Initialize from environment
   console.log('2. Initializing RabbitMQ from environment variables...');
   try {
-    initRabbitMq(); // No config - uses env vars only
+    await initializeRabbitMq(); // No config - uses env vars only
     console.log('✅ RabbitMQ initialized from environment variables\n');
   } catch (error) {
     console.log('❌ Failed to initialize from environment:', error instanceof Error ? error.message : 'Unknown error');

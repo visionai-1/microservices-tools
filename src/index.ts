@@ -2,7 +2,7 @@
 export { Logging } from './logging';
 export { 
     default as RabbitMQService,
-    initRabbitMq,
+    initializeRabbitMq,
     validateRabbitMQEnv,
     getMissingRabbitMQEnvVars
 } from './rabbitmq';

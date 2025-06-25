@@ -21,10 +21,10 @@ export type { KeycloakBaseConfig, KeycloakConnectConfig, KeycloakAdminConfig, Ke
  * - KEYCLOAK_ADMIN_CLIENT_ID (for admin functionality)
  * - KEYCLOAK_ADMIN_CLIENT_SECRET (for admin functionality)
  *
- * @returns KeycloakService singleton instance
+ * @returns Promise<KeycloakService> singleton instance
  * @throws Error if required environment variables are missing
  */
-export declare const initializeKeycloak: () => KeycloakService;
+export declare const initializeKeycloak: () => Promise<KeycloakService>;
 /**
  * Check if all required Keycloak environment variables are set
  * @returns true if all required env vars are present, false otherwise

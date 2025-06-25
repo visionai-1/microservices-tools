@@ -54,10 +54,10 @@ export type {
  * - KEYCLOAK_ADMIN_CLIENT_ID (for admin functionality)
  * - KEYCLOAK_ADMIN_CLIENT_SECRET (for admin functionality)
  * 
- * @returns KeycloakService singleton instance
+ * @returns Promise<KeycloakService> singleton instance
  * @throws Error if required environment variables are missing
  */
-export const initializeKeycloak = (): KeycloakService => {
+export const initializeKeycloak = async (): Promise<KeycloakService> => {
   return KeycloakService.getInstance();
 };
 

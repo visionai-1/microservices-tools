@@ -18,10 +18,10 @@ class RabbitMQService {
   } = {};
   private static isInitialized: boolean = false;
 
-  static initialize(config: RabbitMQConfig, options: {
+  static async initialize(config: RabbitMQConfig, options: {
     maxReconnectAttempts?: number;
     reconnectDelay?: number;
-  } = {}): void {
+  } = {}): Promise<void> {
     if (this.isInitialized) {
       console.warn('RabbitMQ already initialized. Reinitializing with new config.');
     }
@@ -143,10 +143,10 @@ function createRabbitMQConfigFromEnv(): RabbitMQConfig | null {
  * - RABBITMQ_MAX_RECONNECT_ATTEMPTS (defaults to undefined)
  * - RABBITMQ_RECONNECT_DELAY (defaults to undefined)
  * 
- * @returns void
+ * @returns Promise<void>
  * @throws Error if required environment variables are missing
  */
-export const initRabbitMq = (): void => {
+export const initializeRabbitMq = async (): Promise<void> => {
   const config = createRabbitMQConfigFromEnv();
   if (!config) {
     throw new Error('RabbitMQ initialization failed. Please ensure all required environment variables are set.');
@@ -165,7 +165,16 @@ export const initRabbitMq = (): void => {
     reconnectDelay,
   };
 
-  RabbitMQService.initialize(config, options);
+  await RabbitMQService.initialize(config, options);
+  
+  // Test the connection by creating a producer
+  try {
+    const producer = await RabbitMQService.getProducer();
+    console.log('✅ RabbitMQ connection verified');
+  } catch (error) {
+    console.error('❌ RabbitMQ connection failed:', error instanceof Error ? error.message : 'Unknown error');
+    throw new Error(`RabbitMQ initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 };
 
 /**

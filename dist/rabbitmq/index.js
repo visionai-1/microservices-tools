@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMissingRabbitMQEnvVars = exports.validateRabbitMQEnv = exports.initRabbitMq = void 0;
+exports.getMissingRabbitMQEnvVars = exports.validateRabbitMQEnv = exports.initializeRabbitMq = void 0;
 const producer_1 = require("./producer");
 const consumer_1 = require("./consumer");
 // Export types
@@ -23,7 +23,7 @@ __exportStar(require("./producer"), exports);
 __exportStar(require("./consumer"), exports);
 // Main RabbitMQ service for microservices - Singleton Pattern
 class RabbitMQService {
-    static initialize(config, options = {}) {
+    static async initialize(config, options = {}) {
         if (this.isInitialized) {
             console.warn('RabbitMQ already initialized. Reinitializing with new config.');
         }
@@ -129,10 +129,10 @@ function createRabbitMQConfigFromEnv() {
  * - RABBITMQ_MAX_RECONNECT_ATTEMPTS (defaults to undefined)
  * - RABBITMQ_RECONNECT_DELAY (defaults to undefined)
  *
- * @returns void
+ * @returns Promise<void>
  * @throws Error if required environment variables are missing
  */
-const initRabbitMq = () => {
+const initializeRabbitMq = async () => {
     const config = createRabbitMQConfigFromEnv();
     if (!config) {
         throw new Error('RabbitMQ initialization failed. Please ensure all required environment variables are set.');
@@ -147,9 +147,18 @@ const initRabbitMq = () => {
         maxReconnectAttempts,
         reconnectDelay,
     };
-    RabbitMQService.initialize(config, options);
+    await RabbitMQService.initialize(config, options);
+    // Test the connection by creating a producer
+    try {
+        const producer = await RabbitMQService.getProducer();
+        console.log('✅ RabbitMQ connection verified');
+    }
+    catch (error) {
+        console.error('❌ RabbitMQ connection failed:', error instanceof Error ? error.message : 'Unknown error');
+        throw new Error(`RabbitMQ initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 };
-exports.initRabbitMq = initRabbitMq;
+exports.initializeRabbitMq = initializeRabbitMq;
 /**
  * Check if all required RabbitMQ environment variables are set
  * @returns true if all required env vars are present, false otherwise
