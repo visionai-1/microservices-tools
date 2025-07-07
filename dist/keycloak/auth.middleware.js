@@ -1,9 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authorizeKeycloak = exports.authenticateKeycloak = exports.getKeycloakAdminClient = exports.getKeycloakConnectClient = exports.getKeycloakService = void 0;
-const keycloak_service_1 = require("./keycloak.service");
+exports.authorizeKeycloakClient = exports.authenticateKeycloakClient = exports.getKeycloakConnectClient = void 0;
 const keycloak_connect_client_1 = require("./keycloak-connect.client");
-const keycloak_admin_client_1 = require("./keycloak-admin.client");
 const logging_1 = require("../logging");
 // Helper function to extract and validate token
 const extractToken = (req) => {
@@ -17,26 +15,11 @@ const extractToken = (req) => {
     }
     return authHeader.split(' ')[1];
 };
-// Helper function to get KeycloakService instance
-const getKeycloakService = () => {
-    const keycloakService = keycloak_service_1.KeycloakService.getInstance();
-    if (!keycloakService) {
-        logging_1.Logging.error('KeycloakService not initialized');
-        return null;
-    }
-    return keycloakService;
-};
-exports.getKeycloakService = getKeycloakService;
 // Helper function to get KeycloakConnectClient instance
 const getKeycloakConnectClient = () => {
     return keycloak_connect_client_1.KeycloakConnectClient.getInstance();
 };
 exports.getKeycloakConnectClient = getKeycloakConnectClient;
-// Helper function to get KeycloakAdminClient instance
-const getKeycloakAdminClient = () => {
-    return keycloak_admin_client_1.KeycloakAdminClient.getInstance();
-};
-exports.getKeycloakAdminClient = getKeycloakAdminClient;
 // Helper function to handle authentication errors
 const handleAuthError = (error, req, res) => {
     if (error instanceof Error && error.message.includes('Token validation failed')) {
@@ -55,7 +38,7 @@ const handleAuthError = (error, req, res) => {
     res.status(500).json({ error: 'Internal server error' });
 };
 // Authentication middleware - only verifies token and extracts user info
-const authenticateKeycloak = () => {
+const authenticateKeycloakClient = () => {
     return async (req, res, next) => {
         try {
             const token = extractToken(req);
@@ -75,9 +58,9 @@ const authenticateKeycloak = () => {
         }
     };
 };
-exports.authenticateKeycloak = authenticateKeycloak;
+exports.authenticateKeycloakClient = authenticateKeycloakClient;
 // Authorization middleware - checks if user has required roles
-const authorizeKeycloak = (requiredRoles) => {
+const authorizeKeycloakClient = (requiredRoles) => {
     return (req, res, next) => {
         try {
             if (!req.user) {
@@ -110,4 +93,4 @@ const authorizeKeycloak = (requiredRoles) => {
         }
     };
 };
-exports.authorizeKeycloak = authorizeKeycloak;
+exports.authorizeKeycloakClient = authorizeKeycloakClient;

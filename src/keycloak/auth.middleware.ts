@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { KeycloakService } from './keycloak.service';
 import { KeycloakConnectClient } from './keycloak-connect.client';
-import { KeycloakAdminClient } from './keycloak-admin.client';
 import { UserInfo } from './types';
 import { Logging } from '../logging';
 
@@ -26,24 +24,9 @@ const extractToken = (req: Request): string | null => {
   return authHeader.split(' ')[1];
 };
 
-// Helper function to get KeycloakService instance
-export const getKeycloakService = (): KeycloakService | null => {
-  const keycloakService = KeycloakService.getInstance();
-  if (!keycloakService) {
-    Logging.error('KeycloakService not initialized');
-    return null;
-  }
-  return keycloakService;
-};
-
 // Helper function to get KeycloakConnectClient instance
 export const getKeycloakConnectClient = (): KeycloakConnectClient | null => {
   return KeycloakConnectClient.getInstance();
-};
-
-// Helper function to get KeycloakAdminClient instance
-export const getKeycloakAdminClient = (): KeycloakAdminClient | null => {
-  return KeycloakAdminClient.getInstance();
 };
 
 // Helper function to handle authentication errors
@@ -67,7 +50,7 @@ const handleAuthError = (error: unknown, req: Request, res: Response): void => {
 };
 
 // Authentication middleware - only verifies token and extracts user info
-export const authenticateKeycloak = () => {
+export const authenticateKeycloakClient = () => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const token = extractToken(req);
@@ -90,7 +73,7 @@ export const authenticateKeycloak = () => {
 };
 
 // Authorization middleware - checks if user has required roles
-export const authorizeKeycloak = (requiredRoles?: string[]) => {
+export const authorizeKeycloakClient = (requiredRoles?: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
