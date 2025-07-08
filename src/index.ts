@@ -9,22 +9,16 @@ export {
 
 // ==================== KEYCLOAK AUTHENTICATION & AUTHORIZATION ====================
 
-// Main service and initialization
+// Main client and initialization
 export { 
-    KeycloakService,
-    initializeKeycloak,
-    validateKeycloakEnv,
-    getMissingKeycloakEnvVars,
-    authenticateKeycloak,
-    authorizeKeycloak,
     KeycloakConnectClient,
-    KeycloakAdminClient,
+    initializeKeycloakConnectClient,
+    validateKeycloakEnv,
+    authenticateKeycloakClient,
+    authorizeKeycloakClient,
     getKeycloakConnectClient,
-    getKeycloakAdminClient,
-    KeycloakConfig,
+    KeycloakBaseConfig,
     KeycloakConnectConfig,
-    KeycloakAdminConfig,
     UserInfo,
-    AdminKeycloakUser,
-    AdminTokenResponse,
+    ExtendedJwtPayload,
 } from './keycloak';

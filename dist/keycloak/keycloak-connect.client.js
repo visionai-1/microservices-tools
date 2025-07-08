@@ -9,43 +9,34 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const logging_1 = require("../logging");
 class KeycloakConnectClient {
     constructor(config) {
-        this.config = config;
-        this.keycloak = new keycloak_connect_1.default({}, config);
+        this.clientId = config.resource;
+        this.keycloak = new keycloak_connect_1.default({}, this.createKeycloakConfig(config));
     }
     static getInstance(config) {
         if (!KeycloakConnectClient.instance) {
-            if (config) {
-                KeycloakConnectClient.instance = new KeycloakConnectClient(config);
+            const finalConfig = config || KeycloakConnectClient.createConfigFromEnv();
+            if (!finalConfig) {
+                throw new Error('KeycloakConnectClient initialization failed. Please provide config or set environment variables.');
             }
-            else {
-                // Try to create from environment variables
-                const envConfig = KeycloakConnectClient.createConfigFromEnv();
-                if (envConfig) {
-                    KeycloakConnectClient.instance = new KeycloakConnectClient(envConfig);
-                }
-                else {
-                    throw new Error('KeycloakConnectClient not initialized. Please provide config or set environment variables.');
-                }
-            }
+            KeycloakConnectClient.instance = new KeycloakConnectClient(finalConfig);
         }
         return KeycloakConnectClient.instance;
     }
     /**
      * Create configuration from environment variables
+     * Required: KEYCLOAK_REALM, KEYCLOAK_AUTH_SERVER_URL, KEYCLOAK_RESOURCE
+     * Optional: KEYCLOAK_SSL_REQUIRED
      */
     static createConfigFromEnv() {
         const realm = process.env.KEYCLOAK_REALM;
         const authServerUrl = process.env.KEYCLOAK_AUTH_SERVER_URL;
-        const resource = process.env.KEYCLOAK_RESOURCE;
+        const clientId = process.env.KEYCLOAK_RESOURCE; // Client ID
         const sslRequired = process.env.KEYCLOAK_SSL_REQUIRED;
-        const confidentialPort = process.env.KEYCLOAK_CONFIDENTIAL_PORT;
-        const publicClient = process.env.KEYCLOAK_PUBLIC_CLIENT === 'true';
-        const bearerOnly = process.env.KEYCLOAK_BEARER_ONLY === 'true';
-        if (!realm || !authServerUrl || !resource) {
-            logging_1.Logging.warn('Missing required Keycloak Connect environment variables', {
+        if (!realm || !authServerUrl || !clientId) {
+            logging_1.Logging.warn('Missing required Keycloak environment variables', {
                 realm: !!realm,
                 authServerUrl: !!authServerUrl,
-                resource: !!resource
+                clientId: !!clientId
             });
             return null;
         }
@@ -53,13 +44,23 @@ class KeycloakConnectClient {
             realm,
             'auth-server-url': authServerUrl,
             'ssl-required': sslRequired || 'external',
-            resource,
-            'public-client': publicClient,
-            'confidential-port': confidentialPort ? parseInt(confidentialPort) : 0,
-            'bearer-only': bearerOnly,
+            resource: clientId
         };
     }
-    // ==================== AUTHENTICATION METHODS ====================
+    /**
+     * Create Keycloak configuration optimized for bearer-only token validation
+     */
+    createKeycloakConfig(config) {
+        return {
+            realm: config.realm,
+            'auth-server-url': config['auth-server-url'],
+            'ssl-required': config['ssl-required'],
+            resource: config.resource, // Client ID from KEYCLOAK_RESOURCE
+            // Bearer-only optimization for microservices
+            'bearer-only': true,
+            'public-client': true
+        };
+    }
     async verifyToken(token) {
         var _a, _b, _c;
         try {
@@ -71,7 +72,6 @@ class KeycloakConnectClient {
                 throw new Error('Invalid token');
             }
             const payload = decoded.payload;
-            // Verify the token with Keycloak
             const verified = await this.keycloak.grantManager.validateToken(token);
             if (!verified) {
                 logging_1.Logging.security('Token validation failed', {
@@ -79,33 +79,27 @@ class KeycloakConnectClient {
                 });
                 throw new Error('Token validation failed');
             }
-            // Extract user information
-            const userInfo = {
+            return {
                 sub: payload.sub || '',
                 email: payload.email,
                 name: payload.name,
                 preferred_username: payload.preferred_username,
                 roles: (_a = payload.realm_access) === null || _a === void 0 ? void 0 : _a.roles,
-                permissions: (_c = (_b = payload.resource_access) === null || _b === void 0 ? void 0 : _b[this.config.resource]) === null || _c === void 0 ? void 0 : _c.roles,
+                permissions: (_c = (_b = payload.resource_access) === null || _b === void 0 ? void 0 : _b[this.clientId]) === null || _c === void 0 ? void 0 : _c.roles // Client-specific roles
             };
-            return userInfo;
         }
         catch (error) {
-            if (error instanceof Error) {
-                logging_1.Logging.error('Token verification failed', {
-                    error: error.message,
-                    stack: error.stack
-                });
-                throw new Error(`Token verification failed: ${error.message}`);
-            }
-            logging_1.Logging.error('Token verification failed with unknown error');
-            throw new Error('Token verification failed: Unknown error');
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            logging_1.Logging.error('Token verification failed', {
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            throw new Error(`Token verification failed: ${errorMessage}`);
         }
     }
     hasRequiredRoles(userInfo, requiredRoles) {
-        if (!requiredRoles || requiredRoles.length === 0) {
+        if (!(requiredRoles === null || requiredRoles === void 0 ? void 0 : requiredRoles.length))
             return true;
-        }
         const userRoles = [...(userInfo.roles || []), ...(userInfo.permissions || [])];
         return requiredRoles.some(role => userRoles.includes(role));
     }
@@ -122,20 +116,8 @@ class KeycloakConnectClient {
         const decoded = jsonwebtoken_1.default.decode(token);
         return [
             ...(((_a = decoded === null || decoded === void 0 ? void 0 : decoded.realm_access) === null || _a === void 0 ? void 0 : _a.roles) || []),
-            ...(((_c = (_b = decoded === null || decoded === void 0 ? void 0 : decoded.resource_access) === null || _b === void 0 ? void 0 : _b[this.config.resource]) === null || _c === void 0 ? void 0 : _c.roles) || [])
+            ...(((_c = (_b = decoded === null || decoded === void 0 ? void 0 : decoded.resource_access) === null || _b === void 0 ? void 0 : _b[this.clientId]) === null || _c === void 0 ? void 0 : _c.roles) || []) // Client-specific roles
         ];
-    }
-    /**
-     * Get the underlying Keycloak instance
-     */
-    getKeycloakInstance() {
-        return this.keycloak;
-    }
-    /**
-     * Get the configuration
-     */
-    getConfig() {
-        return this.config;
     }
 }
 exports.KeycloakConnectClient = KeycloakConnectClient;
