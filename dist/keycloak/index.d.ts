@@ -1,7 +1,8 @@
 import { KeycloakConnectClient } from './keycloak-connect.client';
 export { KeycloakConnectClient } from './keycloak-connect.client';
-export { authenticateKeycloakClient, authorizeKeycloakClient, getKeycloakConnectClient } from './auth.middleware';
-export type { KeycloakBaseConfig, KeycloakConnectConfig, UserInfo, ExtendedJwtPayload } from './types';
+export { verifyAccessToken } from './keycloak-connect.client';
+export { authenticateKeycloakClient, authorizeKeycloakClient, getKeycloakConnectClient, extractToken } from './auth.middleware';
+export type { KeycloakBaseConfig, KeycloakConnectConfig, UserInfo, ExtendedJwtPayload, KeycloakTokenPayload, Principal } from './types';
 /**
  * Initialize KeycloakConnectClient from environment variables
  * This should be called once at microservice startup

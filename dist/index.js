@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getKeycloakConnectClient = exports.authorizeKeycloakClient = exports.authenticateKeycloakClient = exports.validateKeycloakEnv = exports.initializeKeycloakConnectClient = exports.KeycloakConnectClient = exports.getMissingRabbitMQEnvVars = exports.validateRabbitMQEnv = exports.initializeRabbitMq = exports.RabbitMQService = exports.Logging = void 0;
+exports.extractToken = exports.verifyAccessToken = exports.getKeycloakConnectClient = exports.authorizeKeycloakClient = exports.authenticateKeycloakClient = exports.validateKeycloakEnv = exports.initializeKeycloakConnectClient = exports.KeycloakConnectClient = exports.getMissingRabbitMQEnvVars = exports.validateRabbitMQEnv = exports.initializeRabbitMq = exports.RabbitMQService = exports.Logging = void 0;
 // ==================== CORE SERVICES ====================
 var logging_1 = require("./logging");
 Object.defineProperty(exports, "Logging", { enumerable: true, get: function () { return logging_1.Logging; } });
@@ -21,3 +21,5 @@ Object.defineProperty(exports, "validateKeycloakEnv", { enumerable: true, get: f
 Object.defineProperty(exports, "authenticateKeycloakClient", { enumerable: true, get: function () { return keycloak_1.authenticateKeycloakClient; } });
 Object.defineProperty(exports, "authorizeKeycloakClient", { enumerable: true, get: function () { return keycloak_1.authorizeKeycloakClient; } });
 Object.defineProperty(exports, "getKeycloakConnectClient", { enumerable: true, get: function () { return keycloak_1.getKeycloakConnectClient; } });
+Object.defineProperty(exports, "verifyAccessToken", { enumerable: true, get: function () { return keycloak_1.verifyAccessToken; } });
+Object.defineProperty(exports, "extractToken", { enumerable: true, get: function () { return keycloak_1.extractToken; } });

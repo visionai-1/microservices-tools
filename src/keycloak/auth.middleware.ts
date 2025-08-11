@@ -11,17 +11,49 @@ declare global {
   }
 }
 
-// Helper function to extract and validate token
-const extractToken = (req: Request): string | null => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    Logging.security('Unauthorized access attempt - no token', {
-      ip: req.ip,
-      path: req.path
-    });
-    return null;
+// Helper function to extract and validate token from Authorization header or cookies
+export const extractToken = (req: Request): string | null => {
+  // 1) Authorization: Bearer <token>
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
   }
-  return authHeader.split(' ')[1];
+
+  // 2) Cookies (support configurable names via env, defaults provided)
+  const cookieNames = (process.env.KEYCLOAK_TOKEN_COOKIE_NAMES || 'access_token,token,kc_access')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Prefer req.cookies if a cookie middleware populated it
+  const sourceCookies: Record<string, string> | undefined =
+    (req as any).cookies || (req as any).signedCookies;
+
+  const getCookie = (name: string): string | undefined => {
+    if (sourceCookies && typeof sourceCookies === 'object') {
+      return sourceCookies[name];
+    }
+    const header = req.headers.cookie;
+    if (!header) return undefined;
+    const parts = header.split(';');
+    for (const part of parts) {
+      const [k, ...rest] = part.trim().split('=');
+      if (k === name) return decodeURIComponent(rest.join('='));
+    }
+    return undefined;
+  };
+
+  for (const name of cookieNames) {
+    const value = getCookie(name);
+    if (value) {
+      return value.startsWith('Bearer ')
+        ? value.slice(7)
+        : value;
+    }
+  }
+
+  // No token found
+  return null;
 };
 
 // Helper function to get KeycloakConnectClient instance
@@ -55,6 +87,10 @@ export const authenticateKeycloakClient = () => {
     try {
       const token = extractToken(req);
       if (!token) {
+        Logging.security('Unauthorized access attempt - no token', {
+          ip: req.ip,
+          path: req.path,
+        });
         return res.status(401).json({ error: 'No token provided' });
       }
 

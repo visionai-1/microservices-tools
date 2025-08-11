@@ -4,9 +4,25 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeycloakConnectClient = void 0;
+exports.verifyAccessToken = verifyAccessToken;
 const keycloak_connect_1 = __importDefault(require("keycloak-connect"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const jose_1 = require("jose");
 const logging_1 = require("../logging");
+const ISSUER = process.env.KEYCLOAK_ISSUER;
+const AUDIENCE = process.env.KEYCLOAK_AUDIENCE;
+const JWKS = (0, jose_1.createRemoteJWKSet)(new URL(`${ISSUER}/protocol/openid-connect/certs`));
+async function verifyAccessToken(token) {
+    var _a, _b, _c, _d;
+    const { payload } = await (0, jose_1.jwtVerify)(token, JWKS, {
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        clockTolerance: 5,
+    });
+    const p = payload;
+    const realmRoles = (_b = (_a = p.realm_access) === null || _a === void 0 ? void 0 : _a.roles) !== null && _b !== void 0 ? _b : [];
+    const clientRoles = Object.entries((_c = p.resource_access) !== null && _c !== void 0 ? _c : {}).flatMap(([client, data]) => { var _a; return ((_a = data === null || data === void 0 ? void 0 : data.roles) !== null && _a !== void 0 ? _a : []).map((r) => `${client}:${r}`); });
+    return { sub: p.sub, email: (_d = p.email) !== null && _d !== void 0 ? _d : p.preferred_username, realmRoles, clientRoles, raw: p };
+}
 class KeycloakConnectClient {
     constructor(config) {
         this.clientId = config.resource;
@@ -62,30 +78,26 @@ class KeycloakConnectClient {
         };
     }
     async verifyToken(token) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f;
         try {
-            const decoded = jsonwebtoken_1.default.decode(token, { complete: true });
-            if (!decoded || typeof decoded.payload === 'string') {
-                logging_1.Logging.security('Invalid token format', {
-                    error: 'Token could not be decoded'
-                });
-                throw new Error('Invalid token');
-            }
-            const payload = decoded.payload;
-            const verified = await this.keycloak.grantManager.validateToken(token);
-            if (!verified) {
-                logging_1.Logging.security('Token validation failed', {
-                    userId: payload.sub
-                });
-                throw new Error('Token validation failed');
-            }
+            const { payload } = await (0, jose_1.jwtVerify)(token, JWKS, {
+                issuer: ISSUER,
+                audience: AUDIENCE,
+                clockTolerance: 5,
+            });
+            const p = payload;
+            const realmRoles = (_b = (_a = p.realm_access) === null || _a === void 0 ? void 0 : _a.roles) !== null && _b !== void 0 ? _b : [];
+            const clientRoles = Object.entries((_c = p.resource_access) !== null && _c !== void 0 ? _c : {}).flatMap(([client, data]) => { var _a; return ((_a = data === null || data === void 0 ? void 0 : data.roles) !== null && _a !== void 0 ? _a : []).map((r) => `${client}:${r}`); });
             return {
-                sub: payload.sub || '',
-                email: payload.email,
-                name: payload.name,
-                preferred_username: payload.preferred_username,
-                roles: (_a = payload.realm_access) === null || _a === void 0 ? void 0 : _a.roles,
-                permissions: (_c = (_b = payload.resource_access) === null || _b === void 0 ? void 0 : _b[this.clientId]) === null || _c === void 0 ? void 0 : _c.roles // Client-specific roles
+                sub: p.sub || '',
+                email: (_d = p.email) !== null && _d !== void 0 ? _d : p.preferred_username,
+                name: undefined,
+                preferred_username: p.preferred_username,
+                roles: realmRoles,
+                permissions: (_f = (_e = p.resource_access) === null || _e === void 0 ? void 0 : _e[this.clientId]) === null || _f === void 0 ? void 0 : _f.roles,
+                realmRoles,
+                clientRoles,
+                raw: p,
             };
         }
         catch (error) {
@@ -108,12 +120,12 @@ class KeycloakConnectClient {
     }
     validateAccessTokenScope(token, scope) {
         var _a, _b, _c;
-        const decoded = jsonwebtoken_1.default.decode(token);
+        const decoded = (0, jose_1.decodeJwt)(token);
         return (_c = (_b = (_a = decoded === null || decoded === void 0 ? void 0 : decoded.realm_access) === null || _a === void 0 ? void 0 : _a.roles) === null || _b === void 0 ? void 0 : _b.includes(scope)) !== null && _c !== void 0 ? _c : false;
     }
     extractRoles(token) {
         var _a, _b, _c;
-        const decoded = jsonwebtoken_1.default.decode(token);
+        const decoded = (0, jose_1.decodeJwt)(token);
         return [
             ...(((_a = decoded === null || decoded === void 0 ? void 0 : decoded.realm_access) === null || _a === void 0 ? void 0 : _a.roles) || []),
             ...(((_c = (_b = decoded === null || decoded === void 0 ? void 0 : decoded.resource_access) === null || _b === void 0 ? void 0 : _b[this.clientId]) === null || _c === void 0 ? void 0 : _c.roles) || []) // Client-specific roles

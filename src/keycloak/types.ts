@@ -1,25 +1,37 @@
-// ==================== BASE CONFIGURATION TYPES ====================
+export type KeycloakTokenPayload = {
+  iss: string;
+  sub: string;
+  aud?: string | string[];
+  exp: number;
+  iat: number;
+  azp?: string;
+  email?: string;
+  preferred_username?: string;
+  realm_access?: { roles?: string[] };
+  resource_access?: Record<string, { roles?: string[] }>;
+  permissions?: string[];
+};
 
-/**
- * Base Keycloak configuration shared by all clients
- */
+export type Principal = {
+  sub: string;
+  email?: string;
+  realmRoles: string[];
+  clientRoles: string[]; // "client:role"
+  raw: KeycloakTokenPayload;
+};
+
+// Backwards-compat configuration types still used by the client
 export interface KeycloakBaseConfig {
   realm: string;
   'auth-server-url': string;
 }
 
-/**
- * Configuration interface for Keycloak authentication client
- * Simplified for token validation only
- */
 export interface KeycloakConnectConfig extends KeycloakBaseConfig {
   'ssl-required': 'external' | 'all' | 'none';
   resource: string;
 }
 
-/**
- * User information extracted from JWT token
- */
+// Backwards-compat user types with additional fields for new data
 export interface UserInfo {
   sub: string;
   email?: string;
@@ -27,22 +39,9 @@ export interface UserInfo {
   preferred_username?: string;
   roles?: string[];
   permissions?: string[];
+  realmRoles?: string[];
+  clientRoles?: string[];
+  raw?: KeycloakTokenPayload;
 }
 
-/**
- * Extended JWT payload with Keycloak-specific fields
- */
-export interface ExtendedJwtPayload {
-  sub?: string;
-  email?: string;
-  name?: string;
-  preferred_username?: string;
-  realm_access?: {
-    roles: string[];
-  };
-  resource_access?: {
-    [key: string]: {
-      roles: string[];
-    };
-  };
-} 
+export type ExtendedJwtPayload = KeycloakTokenPayload;

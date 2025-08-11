@@ -3,12 +3,14 @@ import { KeycloakConnectClient } from './keycloak-connect.client';
 
 // ==================== MAIN CLIENT & INITIALIZATION ====================
 export { KeycloakConnectClient } from './keycloak-connect.client';
+export { verifyAccessToken } from './keycloak-connect.client';
 
 // ==================== EXPRESS MIDDLEWARE ====================
 export { 
   authenticateKeycloakClient, 
   authorizeKeycloakClient, 
-  getKeycloakConnectClient
+  getKeycloakConnectClient,
+  extractToken
 } from './auth.middleware';
 
 // ==================== TYPES & INTERFACES ====================
@@ -21,7 +23,9 @@ export type {
   
   // User and authentication types
   UserInfo,
-  ExtendedJwtPayload
+  ExtendedJwtPayload,
+  KeycloakTokenPayload,
+  Principal
 } from './types';
 
 // ==================== ENVIRONMENT-BASED INITIALIZATION ====================

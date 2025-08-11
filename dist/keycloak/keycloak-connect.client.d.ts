@@ -1,4 +1,5 @@
-import { KeycloakConnectConfig, UserInfo } from './types';
+import { KeycloakConnectConfig, UserInfo, Principal } from './types';
+export declare function verifyAccessToken(token: string): Promise<Principal>;
 export declare class KeycloakConnectClient {
     private static instance;
     private keycloak;

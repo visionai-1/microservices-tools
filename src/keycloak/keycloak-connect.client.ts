@@ -1,11 +1,31 @@
 import Keycloak from 'keycloak-connect';
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify, decodeJwt } from 'jose';
 import { Logging } from '../logging';
 import { 
   KeycloakConnectConfig, 
   UserInfo, 
-  ExtendedJwtPayload 
+  ExtendedJwtPayload,
+  KeycloakTokenPayload,
+  Principal 
 } from './types';
+
+const ISSUER = process.env.KEYCLOAK_ISSUER!;
+const AUDIENCE = process.env.KEYCLOAK_AUDIENCE;
+const JWKS = createRemoteJWKSet(new URL(`${ISSUER}/protocol/openid-connect/certs`));
+
+export async function verifyAccessToken(token: string): Promise<Principal> {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer: ISSUER,
+    audience: AUDIENCE,
+    clockTolerance: 5,
+  });
+  const p = payload as unknown as KeycloakTokenPayload;
+  const realmRoles = p.realm_access?.roles ?? [];
+  const clientRoles = Object.entries(p.resource_access ?? {}).flatMap(
+    ([client, data]) => (data?.roles ?? []).map((r) => `${client}:${r}`)
+  );
+  return { sub: p.sub, email: p.email ?? p.preferred_username, realmRoles, clientRoles, raw: p };
+}
 
 export class KeycloakConnectClient {
   private static instance: KeycloakConnectClient;
@@ -73,31 +93,27 @@ export class KeycloakConnectClient {
 
   public async verifyToken(token: string): Promise<UserInfo> {
     try {
-      const decoded = jwt.decode(token, { complete: true });
-      if (!decoded || typeof decoded.payload === 'string') {
-        Logging.security('Invalid token format', {
-          error: 'Token could not be decoded'
-        });
-        throw new Error('Invalid token');
-      }
-
-      const payload = decoded.payload as ExtendedJwtPayload;
-
-      const verified = await this.keycloak.grantManager.validateToken(token as any);
-      if (!verified) {
-        Logging.security('Token validation failed', {
-          userId: payload.sub
-        });
-        throw new Error('Token validation failed');
-      }
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        clockTolerance: 5,
+      });
+      const p = payload as unknown as KeycloakTokenPayload;
+      const realmRoles = p.realm_access?.roles ?? [];
+      const clientRoles = Object.entries(p.resource_access ?? {}).flatMap(
+        ([client, data]) => (data?.roles ?? []).map((r) => `${client}:${r}`)
+      );
 
       return {
-        sub: payload.sub || '',
-        email: payload.email,
-        name: payload.name,
-        preferred_username: payload.preferred_username,
-        roles: payload.realm_access?.roles,
-        permissions: payload.resource_access?.[this.clientId]?.roles // Client-specific roles
+        sub: p.sub || '',
+        email: p.email ?? p.preferred_username,
+        name: undefined,
+        preferred_username: p.preferred_username,
+        roles: realmRoles,
+        permissions: p.resource_access?.[this.clientId]?.roles,
+        realmRoles,
+        clientRoles,
+        raw: p,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -121,12 +137,12 @@ export class KeycloakConnectClient {
   }
 
   public validateAccessTokenScope(token: string, scope: string): boolean {
-    const decoded = jwt.decode(token) as ExtendedJwtPayload;
+    const decoded = decodeJwt(token) as unknown as ExtendedJwtPayload;
     return decoded?.realm_access?.roles?.includes(scope) ?? false;
   }
 
   public extractRoles(token: string): string[] {
-    const decoded = jwt.decode(token) as ExtendedJwtPayload;
+    const decoded = decodeJwt(token) as unknown as ExtendedJwtPayload;
     return [
       ...(decoded?.realm_access?.roles || []),
       ...(decoded?.resource_access?.[this.clientId]?.roles || []) // Client-specific roles

@@ -21,4 +21,8 @@ export {
     KeycloakConnectConfig,
     UserInfo,
     ExtendedJwtPayload,
+    KeycloakTokenPayload,
+    Principal,
+    verifyAccessToken,
+    extractToken,
 } from './keycloak';

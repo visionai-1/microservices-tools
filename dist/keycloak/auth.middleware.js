@@ -1,20 +1,49 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authorizeKeycloakClient = exports.authenticateKeycloakClient = exports.getKeycloakConnectClient = void 0;
+exports.authorizeKeycloakClient = exports.authenticateKeycloakClient = exports.getKeycloakConnectClient = exports.extractToken = void 0;
 const keycloak_connect_client_1 = require("./keycloak-connect.client");
 const logging_1 = require("../logging");
-// Helper function to extract and validate token
+// Helper function to extract and validate token from Authorization header or cookies
 const extractToken = (req) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        logging_1.Logging.security('Unauthorized access attempt - no token', {
-            ip: req.ip,
-            path: req.path
-        });
-        return null;
+    // 1) Authorization: Bearer <token>
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+        return authHeader.slice(7);
     }
-    return authHeader.split(' ')[1];
+    // 2) Cookies (support configurable names via env, defaults provided)
+    const cookieNames = (process.env.KEYCLOAK_TOKEN_COOKIE_NAMES || 'access_token,token,kc_access')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    // Prefer req.cookies if a cookie middleware populated it
+    const sourceCookies = req.cookies || req.signedCookies;
+    const getCookie = (name) => {
+        if (sourceCookies && typeof sourceCookies === 'object') {
+            return sourceCookies[name];
+        }
+        const header = req.headers.cookie;
+        if (!header)
+            return undefined;
+        const parts = header.split(';');
+        for (const part of parts) {
+            const [k, ...rest] = part.trim().split('=');
+            if (k === name)
+                return decodeURIComponent(rest.join('='));
+        }
+        return undefined;
+    };
+    for (const name of cookieNames) {
+        const value = getCookie(name);
+        if (value) {
+            return value.startsWith('Bearer ')
+                ? value.slice(7)
+                : value;
+        }
+    }
+    // No token found
+    return null;
 };
+exports.extractToken = extractToken;
 // Helper function to get KeycloakConnectClient instance
 const getKeycloakConnectClient = () => {
     return keycloak_connect_client_1.KeycloakConnectClient.getInstance();
@@ -41,8 +70,12 @@ const handleAuthError = (error, req, res) => {
 const authenticateKeycloakClient = () => {
     return async (req, res, next) => {
         try {
-            const token = extractToken(req);
+            const token = (0, exports.extractToken)(req);
             if (!token) {
+                logging_1.Logging.security('Unauthorized access attempt - no token', {
+                    ip: req.ip,
+                    path: req.path,
+                });
                 return res.status(401).json({ error: 'No token provided' });
             }
             const keycloakConnectClient = (0, exports.getKeycloakConnectClient)();
