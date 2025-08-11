@@ -1,6 +1,5 @@
 import { KeycloakConnectClient } from './keycloak-connect.client';
 export { KeycloakConnectClient } from './keycloak-connect.client';
-export { verifyAccessToken } from './keycloak-connect.client';
 export { authenticateKeycloakClient, authorizeKeycloakClient, getKeycloakConnectClient, extractToken } from './auth.middleware';
 export type { KeycloakBaseConfig, KeycloakConnectConfig, UserInfo, ExtendedJwtPayload, KeycloakTokenPayload, Principal } from './types';
 /**

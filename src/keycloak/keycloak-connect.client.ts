@@ -1,31 +1,16 @@
 import Keycloak from 'keycloak-connect';
-import { createRemoteJWKSet, jwtVerify, decodeJwt } from 'jose';
+import { decodeJwt } from 'jose';
 import { Logging } from '../logging';
 import { 
   KeycloakConnectConfig, 
   UserInfo, 
   ExtendedJwtPayload,
-  KeycloakTokenPayload,
-  Principal 
+  KeycloakTokenPayload
 } from './types';
+import { verifyAccessToken as verifyAccessTokenWithIssuer, buildPrincipal } from '../auth/jwt';
 
 const ISSUER = process.env.KEYCLOAK_ISSUER!;
 const AUDIENCE = process.env.KEYCLOAK_AUDIENCE;
-const JWKS = createRemoteJWKSet(new URL(`${ISSUER}/protocol/openid-connect/certs`));
-
-export async function verifyAccessToken(token: string): Promise<Principal> {
-  const { payload } = await jwtVerify(token, JWKS, {
-    issuer: ISSUER,
-    audience: AUDIENCE,
-    clockTolerance: 5,
-  });
-  const p = payload as unknown as KeycloakTokenPayload;
-  const realmRoles = p.realm_access?.roles ?? [];
-  const clientRoles = Object.entries(p.resource_access ?? {}).flatMap(
-    ([client, data]) => (data?.roles ?? []).map((r) => `${client}:${r}`)
-  );
-  return { sub: p.sub, email: p.email ?? p.preferred_username, realmRoles, clientRoles, raw: p };
-}
 
 export class KeycloakConnectClient {
   private static instance: KeycloakConnectClient;
@@ -93,27 +78,23 @@ export class KeycloakConnectClient {
 
   public async verifyToken(token: string): Promise<UserInfo> {
     try {
-      const { payload } = await jwtVerify(token, JWKS, {
+      const payload = await verifyAccessTokenWithIssuer(token, {
         issuer: ISSUER,
         audience: AUDIENCE,
-        clockTolerance: 5,
+        clockToleranceSec: 5,
       });
-      const p = payload as unknown as KeycloakTokenPayload;
-      const realmRoles = p.realm_access?.roles ?? [];
-      const clientRoles = Object.entries(p.resource_access ?? {}).flatMap(
-        ([client, data]) => (data?.roles ?? []).map((r) => `${client}:${r}`)
-      );
+      const { realmRoles, clientRoles } = buildPrincipal(payload as KeycloakTokenPayload);
 
       return {
-        sub: p.sub || '',
-        email: p.email ?? p.preferred_username,
+        sub: payload.sub || '',
+        email: payload.email ?? payload.preferred_username,
         name: undefined,
-        preferred_username: p.preferred_username,
+        preferred_username: payload.preferred_username,
         roles: realmRoles,
-        permissions: p.resource_access?.[this.clientId]?.roles,
+        permissions: payload.resource_access?.[this.clientId]?.roles,
         realmRoles,
         clientRoles,
-        raw: p,
+        raw: payload,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

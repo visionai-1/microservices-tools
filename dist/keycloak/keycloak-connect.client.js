@@ -4,25 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeycloakConnectClient = void 0;
-exports.verifyAccessToken = verifyAccessToken;
 const keycloak_connect_1 = __importDefault(require("keycloak-connect"));
 const jose_1 = require("jose");
 const logging_1 = require("../logging");
+const jwt_1 = require("../auth/jwt");
 const ISSUER = process.env.KEYCLOAK_ISSUER;
 const AUDIENCE = process.env.KEYCLOAK_AUDIENCE;
-const JWKS = (0, jose_1.createRemoteJWKSet)(new URL(`${ISSUER}/protocol/openid-connect/certs`));
-async function verifyAccessToken(token) {
-    var _a, _b, _c, _d;
-    const { payload } = await (0, jose_1.jwtVerify)(token, JWKS, {
-        issuer: ISSUER,
-        audience: AUDIENCE,
-        clockTolerance: 5,
-    });
-    const p = payload;
-    const realmRoles = (_b = (_a = p.realm_access) === null || _a === void 0 ? void 0 : _a.roles) !== null && _b !== void 0 ? _b : [];
-    const clientRoles = Object.entries((_c = p.resource_access) !== null && _c !== void 0 ? _c : {}).flatMap(([client, data]) => { var _a; return ((_a = data === null || data === void 0 ? void 0 : data.roles) !== null && _a !== void 0 ? _a : []).map((r) => `${client}:${r}`); });
-    return { sub: p.sub, email: (_d = p.email) !== null && _d !== void 0 ? _d : p.preferred_username, realmRoles, clientRoles, raw: p };
-}
 class KeycloakConnectClient {
     constructor(config) {
         this.clientId = config.resource;
@@ -78,26 +65,24 @@ class KeycloakConnectClient {
         };
     }
     async verifyToken(token) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c;
         try {
-            const { payload } = await (0, jose_1.jwtVerify)(token, JWKS, {
+            const payload = await (0, jwt_1.verifyAccessToken)(token, {
                 issuer: ISSUER,
                 audience: AUDIENCE,
-                clockTolerance: 5,
+                clockToleranceSec: 5,
             });
-            const p = payload;
-            const realmRoles = (_b = (_a = p.realm_access) === null || _a === void 0 ? void 0 : _a.roles) !== null && _b !== void 0 ? _b : [];
-            const clientRoles = Object.entries((_c = p.resource_access) !== null && _c !== void 0 ? _c : {}).flatMap(([client, data]) => { var _a; return ((_a = data === null || data === void 0 ? void 0 : data.roles) !== null && _a !== void 0 ? _a : []).map((r) => `${client}:${r}`); });
+            const { realmRoles, clientRoles } = (0, jwt_1.buildPrincipal)(payload);
             return {
-                sub: p.sub || '',
-                email: (_d = p.email) !== null && _d !== void 0 ? _d : p.preferred_username,
+                sub: payload.sub || '',
+                email: (_a = payload.email) !== null && _a !== void 0 ? _a : payload.preferred_username,
                 name: undefined,
-                preferred_username: p.preferred_username,
+                preferred_username: payload.preferred_username,
                 roles: realmRoles,
-                permissions: (_f = (_e = p.resource_access) === null || _e === void 0 ? void 0 : _e[this.clientId]) === null || _f === void 0 ? void 0 : _f.roles,
+                permissions: (_c = (_b = payload.resource_access) === null || _b === void 0 ? void 0 : _b[this.clientId]) === null || _c === void 0 ? void 0 : _c.roles,
                 realmRoles,
                 clientRoles,
-                raw: p,
+                raw: payload,
             };
         }
         catch (error) {

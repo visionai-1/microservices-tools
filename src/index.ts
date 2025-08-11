@@ -23,6 +23,7 @@ export {
     ExtendedJwtPayload,
     KeycloakTokenPayload,
     Principal,
-    verifyAccessToken,
     extractToken,
 } from './keycloak';
+export { verifyAccessToken as verifyAccessTokenWithIssuer, buildPrincipal } from './auth/jwt';
+export type { KeycloakTokenPayload as JwtKeycloakTokenPayload } from './auth/jwt';

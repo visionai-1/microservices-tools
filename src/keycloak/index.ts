@@ -3,7 +3,6 @@ import { KeycloakConnectClient } from './keycloak-connect.client';
 
 // ==================== MAIN CLIENT & INITIALIZATION ====================
 export { KeycloakConnectClient } from './keycloak-connect.client';
-export { verifyAccessToken } from './keycloak-connect.client';
 
 // ==================== EXPRESS MIDDLEWARE ====================
 export { 
