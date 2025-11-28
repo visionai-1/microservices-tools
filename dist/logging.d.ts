@@ -57,6 +57,10 @@ export declare class Logging {
      */
     static request: (method: string, url: string, statusCode?: number, responseTime?: number, ip?: string) => void;
     /**
+     * Log with request ID context
+     */
+    static withRequestId: (requestId: string, level: string, message: string, meta?: any) => void;
+    /**
      * Get the underlying Winston logger instance
      */
     static getLogger: () => winston.Logger;

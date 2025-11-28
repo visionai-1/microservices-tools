@@ -55,6 +55,9 @@ const consoleFormat = printf(({ level, message, timestamp, stack, service, ...me
         essentialMeta.userId = filteredMeta.userId;
     if (filteredMeta.ip)
         essentialMeta.ip = filteredMeta.ip;
+    // Add request ID if present
+    if (filteredMeta.requestId)
+        essentialMeta.reqId = filteredMeta.requestId;
     if (filteredMeta.method && filteredMeta.url) {
         essentialMeta.request = `${filteredMeta.method} ${filteredMeta.url}`;
     }
@@ -310,6 +313,12 @@ Logging.request = (method, url, statusCode, responseTime, ip) => {
         responseTime: responseTime ? `${responseTime}ms` : undefined,
         ip
     });
+};
+/**
+ * Log with request ID context
+ */
+Logging.withRequestId = (requestId, level, message, meta) => {
+    logger.log(level, message, { requestId, ...meta });
 };
 /**
  * Get the underlying Winston logger instance

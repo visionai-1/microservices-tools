@@ -53,6 +53,8 @@ const consoleFormat = printf(({ level, message, timestamp, stack, service, ...me
   if (filteredMeta.error) essentialMeta.error = filteredMeta.error;
   if (filteredMeta.userId) essentialMeta.userId = filteredMeta.userId;
   if (filteredMeta.ip) essentialMeta.ip = filteredMeta.ip;
+  // Add request ID if present
+  if (filteredMeta.requestId) essentialMeta.reqId = filteredMeta.requestId;
   if (filteredMeta.method && filteredMeta.url) {
     essentialMeta.request = `${filteredMeta.method} ${filteredMeta.url}`;
   }
@@ -347,6 +349,13 @@ export class Logging {
       responseTime: responseTime ? `${responseTime}ms` : undefined,
       ip
     });
+  };
+
+  /**
+   * Log with request ID context
+   */
+  public static withRequestId = (requestId: string, level: string, message: string, meta?: any) => {
+    logger.log(level, message, { requestId, ...meta });
   };
 
   /**
