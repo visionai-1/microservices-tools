@@ -1,6 +1,18 @@
 import winston from 'winston';
 export declare class Logging {
     /**
+     * Set request ID context for all subsequent logs in this async context
+     */
+    static setRequestContext: (requestId: string, callback: () => void | Promise<void>) => void | Promise<void>;
+    /**
+     * Set request ID for current context (useful for middleware)
+     */
+    static setRequestId: (requestId: string) => void;
+    /**
+     * Get current request ID from context
+     */
+    static getCurrentRequestId: () => string | undefined;
+    /**
      * Generic log method
      */
     static log: (level: string, message: any, meta?: any) => void;
@@ -43,15 +55,15 @@ export declare class Logging {
     /**
      * Log database operations
      */
-    static database: (operation: string, details?: any) => void;
+    static database: (operation: string | Error, details?: any) => void;
     /**
      * Log authentication events
      */
-    static auth: (event: string, details?: any) => void;
+    static auth: (event: string | Error, details?: any) => void;
     /**
      * Log email events
      */
-    static email: (event: string, details?: any) => void;
+    static email: (event: string | Error, details?: any) => void;
     /**
      * Log API requests (middleware helper)
      */
@@ -59,7 +71,7 @@ export declare class Logging {
     /**
      * Log with request ID context
      */
-    static withRequestId: (requestId: string, level: string, message: string, meta?: any) => void;
+    static withRequestId: (requestId: string, level: string, message: any, meta?: any) => void;
     /**
      * Get the underlying Winston logger instance
      */
@@ -67,27 +79,27 @@ export declare class Logging {
     /**
      * Startup and configuration logging
      */
-    static startup: (message: string, meta?: any) => void;
+    static startup: (message: string | Error, meta?: any) => void;
     /**
      * Performance and metrics logging
      */
-    static performance: (message: string, meta?: any) => void;
+    static performance: (message: string | Error, meta?: any) => void;
     /**
      * Security-related logging
      */
-    static security: (message: string, meta?: any) => void;
+    static security: (message: string | Error, meta?: any) => void;
     /**
      * API operation logging
      */
-    static api: (message: string, meta?: any) => void;
+    static api: (message: string | Error, meta?: any) => void;
     /**
      * Configuration logging
      */
-    static config: (message: string, meta?: any) => void;
+    static config: (message: string | Error, meta?: any) => void;
     /**
      * Shutdown logging
      */
-    static shutdown: (message: string, meta?: any) => void;
+    static shutdown: (message: string | Error, meta?: any) => void;
     /**
      * Display a beautiful startup banner in terminal
      */
@@ -103,5 +115,5 @@ export declare class Logging {
     /**
      * Force immediate console output (useful for debugging)
      */
-    static forceOutput: (message: string, color?: "red" | "green" | "yellow" | "blue" | "magenta" | "cyan") => void;
+    static forceOutput: (message: string | Error, color?: "red" | "green" | "yellow" | "blue" | "magenta" | "cyan") => void;
 }

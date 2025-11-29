@@ -1,5 +1,6 @@
 // logging.ts
 import winston from 'winston';
+import { AsyncLocalStorage } from 'async_hooks';
 
 /**
  * Enhanced Winston Logger with Colors and Production-Ready Configuration
@@ -48,26 +49,51 @@ const consoleFormat = printf(({ level, message, timestamp, stack, service, ...me
   delete filteredMeta.service;
   delete filteredMeta.type;
   
-  // Only show essential metadata if it exists and is meaningful
-  const essentialMeta: any = {};
-  if (filteredMeta.error) essentialMeta.error = filteredMeta.error;
-  if (filteredMeta.userId) essentialMeta.userId = filteredMeta.userId;
-  if (filteredMeta.ip) essentialMeta.ip = filteredMeta.ip;
-  // Add request ID if present
-  if (filteredMeta.requestId) essentialMeta.reqId = filteredMeta.requestId;
+  // Process metadata for display - prioritize important fields but show all meaningful data
+  const displayMeta: any = {};
+  
+  // Add request ID first if present (prioritize it for visibility)
+  if (filteredMeta.requestId) displayMeta.reqId = filteredMeta.requestId;
+  
+  // Add other essential fields
+  if (filteredMeta.error) displayMeta.error = filteredMeta.error;
+  if (filteredMeta.userId) displayMeta.userId = filteredMeta.userId;
+  if (filteredMeta.ip) displayMeta.ip = filteredMeta.ip;
   if (filteredMeta.method && filteredMeta.url) {
-    essentialMeta.request = `${filteredMeta.method} ${filteredMeta.url}`;
+    displayMeta.request = `${filteredMeta.method} ${filteredMeta.url}`;
   }
-  if (filteredMeta.statusCode) essentialMeta.status = filteredMeta.statusCode;
+  if (filteredMeta.statusCode) displayMeta.status = filteredMeta.statusCode;
   if (filteredMeta.duration || filteredMeta.responseTime) {
-    essentialMeta.time = filteredMeta.duration || filteredMeta.responseTime;
+    displayMeta.time = filteredMeta.duration || filteredMeta.responseTime;
   }
+  
+  // Add any remaining metadata that users explicitly passed
+  const remainingMeta = { ...filteredMeta };
+  delete remainingMeta.requestId;
+  delete remainingMeta.error;
+  delete remainingMeta.userId;
+  delete remainingMeta.ip;
+  delete remainingMeta.method;
+  delete remainingMeta.url;
+  delete remainingMeta.statusCode;
+  delete remainingMeta.duration;
+  delete remainingMeta.responseTime;
+  delete remainingMeta.stack; // Stack is handled separately
+  
+  // Merge remaining metadata
+  Object.assign(displayMeta, remainingMeta);
   
   // Show metadata only if there's something meaningful to show
-  const metaStr = Object.keys(essentialMeta).length > 0 ? 
-    ` ${colors.gray}[${Object.entries(essentialMeta).map(([k, v]) => `${k}: ${v}`).join(', ')}]${colors.reset}` : '';
+  const metaStr = Object.keys(displayMeta).length > 0 ? 
+    ` ${colors.gray}[${Object.entries(displayMeta).map(([k, v]) => {
+      // Handle objects and arrays by stringifying them
+      const displayValue = typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+      return `${k}: ${displayValue}`;
+    }).join(', ')}]${colors.reset}` : '';
   
-  const messageContent = stack || message;
+  // Use stack trace if available, otherwise use message
+  // If both stack and message exist, prefer stack for errors
+  const messageContent = (stack && (level === 'error' || level === 'warn')) ? stack : (stack || message);
   const coloredMessage = `${color}${messageContent}${colors.reset}`;
   
   return `${emoji} ${coloredTime} ${coloredLevel}: ${coloredMessage}${metaStr}`;
@@ -144,8 +170,16 @@ const createLogger = () => {
           errors({ stack: true }),
           printf(({ level, message, timestamp, stack, ...meta }) => {
             const emoji = getLogEmoji(level);
-            const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-            return `${emoji} [${timestamp}] ${level.toUpperCase()}: ${stack || message}${metaStr}`;
+            // Clean up metadata for production - remove clutter but keep all user-provided info
+            const cleanMeta = { ...meta };
+            delete cleanMeta.environment;
+            delete cleanMeta.service;
+            delete cleanMeta.type;
+            
+            const metaStr = Object.keys(cleanMeta).length ? ` ${JSON.stringify(cleanMeta)}` : '';
+            // Prefer stack trace for errors in production as well
+            const messageContent = (stack && (level === 'error' || level === 'warn')) ? stack : (stack || message);
+            return `${emoji} [${timestamp}] ${level.toUpperCase()}: ${messageContent}${metaStr}`;
           })
         ),
       })
@@ -207,93 +241,192 @@ const createLogger = () => {
 
 const logger = createLogger();
 
+// Request context storage for thread-safe request ID management
+const requestContext = new AsyncLocalStorage<{ requestId?: string }>();
+
+/**
+ * Helper function to get current request ID from context
+ */
+function getCurrentRequestId(): string | undefined {
+  const context = requestContext.getStore();
+  return context?.requestId;
+}
+
+/**
+ * Helper function to process message input (handles Error objects, extracts stack traces)
+ */
+function processMessage(message: any): { message: string; stack?: string } {
+  if (message instanceof Error) {
+    return {
+      message: message.message,
+      stack: message.stack
+    };
+  } else if (typeof message === 'string') {
+    return { message };
+  } else {
+    return { message: JSON.stringify(message) };
+  }
+}
+
+/**
+ * Helper function to process metadata (merges request ID from context)
+ */
+function processMetadata(meta?: any): any {
+  const currentRequestId = getCurrentRequestId();
+  const baseMeta = meta || {};
+  
+  // If there's a current request ID and it's not already in meta, add it
+  if (currentRequestId && !baseMeta.requestId) {
+    return { requestId: currentRequestId, ...baseMeta };
+  }
+  
+  return baseMeta;
+}
+
 // Enhanced Logging class with more methods and better error handling
 export class Logging {
+  /**
+   * Set request ID context for all subsequent logs in this async context
+   */
+  public static setRequestContext = (requestId: string, callback: () => void | Promise<void>) => {
+    return requestContext.run({ requestId }, callback);
+  };
+
+  /**
+   * Set request ID for current context (useful for middleware)
+   */
+  public static setRequestId = (requestId: string) => {
+    const store = requestContext.getStore();
+    if (store) {
+      store.requestId = requestId;
+    }
+  };
+
+  /**
+   * Get current request ID from context
+   */
+  public static getCurrentRequestId = () => {
+    return getCurrentRequestId();
+  };
+
   /**
    * Generic log method
    */
   public static log = (level: string, message: any, meta?: any) => {
-    logger.log(level, message, meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
+    }
+    
+    logger.log(level, processedMessage, processedMeta);
   };
 
   /**
    * Info level logging - general information
    */
   public static info = (message: any, meta?: any) => {
-    if (message instanceof Error) {
-      logger.info(message.message, { stack: message.stack, ...meta });
-    } else if (typeof message === 'string') {
-      logger.info(message, meta);
-    } else {
-      logger.info(JSON.stringify(message), meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
     }
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Warning level logging - potential issues
    */
   public static warn = (message: any, meta?: any) => {
-    if (message instanceof Error) {
-      logger.warn(message.message, { stack: message.stack, ...meta });
-    } else if (typeof message === 'string') {
-      logger.warn(message, meta);
-    } else {
-      logger.warn(JSON.stringify(message), meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
     }
+    
+    logger.warn(processedMessage, processedMeta);
   };
 
   /**
    * Error level logging - errors and exceptions
    */
   public static error = (message: any, meta?: any) => {
-    if (message instanceof Error) {
-      logger.error(message.message, { stack: message.stack, ...meta });
-    } else if (typeof message === 'string') {
-      logger.error(message, meta);
-    } else {
-      logger.error(JSON.stringify(message), meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
     }
+    
+    logger.error(processedMessage, processedMeta);
   };
 
   /**
    * Debug level logging - detailed debugging information
    */
   public static debug = (message: any, meta?: any) => {
-    if (message instanceof Error) {
-      logger.debug(message.message, { stack: message.stack, ...meta });
-    } else if (typeof message === 'string') {
-      logger.debug(message, meta);
-    } else {
-      logger.debug(JSON.stringify(message), meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
     }
+    
+    logger.debug(processedMessage, processedMeta);
   };
 
   /**
    * HTTP level logging - for API requests and responses
    */
   public static http = (message: any, meta?: any) => {
-    logger.http(message, meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
+    }
+    
+    logger.http(processedMessage, processedMeta);
   };
 
   /**
    * Verbose level logging - detailed operational information
    */
   public static verbose = (message: any, meta?: any) => {
-    logger.verbose(message, meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
+    }
+    
+    logger.verbose(processedMessage, processedMeta);
   };
 
   /**
    * Silly level logging - very detailed debugging
    */
   public static silly = (message: any, meta?: any) => {
-    logger.silly(message, meta);
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata(meta);
+    
+    if (stack) {
+      processedMeta.stack = stack;
+    }
+    
+    logger.silly(processedMessage, processedMeta);
   };
 
   /**
    * Performance profiling
    */
   public static profile = (id: string, meta?: any) => {
-    logger.profile(id, meta);
+    const processedMeta = processMetadata(meta);
+    logger.profile(id, processedMeta);
   };
 
   /**
@@ -306,34 +439,52 @@ export class Logging {
   /**
    * Log database operations
    */
-  public static database = (operation: string, details?: any) => {
-    logger.info(`🗄️ Database: ${operation}`, { 
+  public static database = (operation: string | Error, details?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof operation === 'string' ? `🗄️ Database: ${operation}` : operation
+    );
+    const processedMeta = processMetadata({ 
       type: 'database',
-      operation,
+      operation: typeof operation === 'string' ? operation : 'error',
+      ...(stack && { stack }),
       ...details 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Log authentication events
    */
-  public static auth = (event: string, details?: any) => {
-    logger.info(`🔐 Auth: ${event}`, { 
+  public static auth = (event: string | Error, details?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof event === 'string' ? `🔐 Auth: ${event}` : event
+    );
+    const processedMeta = processMetadata({ 
       type: 'authentication',
-      event,
+      event: typeof event === 'string' ? event : 'error',
+      ...(stack && { stack }),
       ...details 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Log email events
    */
-  public static email = (event: string, details?: any) => {
-    logger.info(`📧 Email: ${event}`, { 
+  public static email = (event: string | Error, details?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof event === 'string' ? `📧 Email: ${event}` : event
+    );
+    const processedMeta = processMetadata({ 
       type: 'email',
-      event,
+      event: typeof event === 'string' ? event : 'error',
+      ...(stack && { stack }),
       ...details 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
@@ -341,7 +492,7 @@ export class Logging {
    */
   public static request = (method: string, url: string, statusCode?: number, responseTime?: number, ip?: string) => {
     const level = statusCode && statusCode >= 400 ? 'warn' : 'http';
-    logger.log(level, `${method} ${url}`, {
+    const processedMeta = processMetadata({
       type: 'request',
       method,
       url,
@@ -349,13 +500,22 @@ export class Logging {
       responseTime: responseTime ? `${responseTime}ms` : undefined,
       ip
     });
+    
+    logger.log(level, `${method} ${url}`, processedMeta);
   };
 
   /**
    * Log with request ID context
    */
-  public static withRequestId = (requestId: string, level: string, message: string, meta?: any) => {
-    logger.log(level, message, { requestId, ...meta });
+  public static withRequestId = (requestId: string, level: string, message: any, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(message);
+    const processedMeta = processMetadata({ requestId, ...meta });
+    
+    if (stack) {
+      processedMeta.stack = stack;
+    }
+    
+    logger.log(level, processedMessage, processedMeta);
   };
 
   /**
@@ -366,61 +526,97 @@ export class Logging {
   /**
    * Startup and configuration logging
    */
-  public static startup = (message: string, meta?: any) => {
-    logger.info(`🚀 Startup: ${message}`, { 
+  public static startup = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `🚀 Startup: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'startup',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Performance and metrics logging  
    */
-  public static performance = (message: string, meta?: any) => {
-    logger.info(`⚡ Performance: ${message}`, { 
+  public static performance = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `⚡ Performance: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'performance',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Security-related logging
    */
-  public static security = (message: string, meta?: any) => {
-    logger.warn(`🛡️ Security: ${message}`, { 
+  public static security = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `🛡️ Security: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'security',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.warn(processedMessage, processedMeta);
   };
 
   /**
    * API operation logging
    */
-  public static api = (message: string, meta?: any) => {
-    logger.info(`🔌 API: ${message}`, { 
+  public static api = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `🔌 API: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'api',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Configuration logging
    */
-  public static config = (message: string, meta?: any) => {
-    logger.info(`⚙️ Config: ${message}`, { 
+  public static config = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `⚙️ Config: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'config',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
    * Shutdown logging
    */
-  public static shutdown = (message: string, meta?: any) => {
-    logger.info(`🛑 Shutdown: ${message}`, { 
+  public static shutdown = (message: string | Error, meta?: any) => {
+    const { message: processedMessage, stack } = processMessage(
+      typeof message === 'string' ? `🛑 Shutdown: ${message}` : message
+    );
+    const processedMeta = processMetadata({ 
       type: 'shutdown',
+      ...(stack && { stack }),
       ...meta 
     });
+    
+    logger.info(processedMessage, processedMeta);
   };
 
   /**
@@ -477,9 +673,10 @@ export class Logging {
   /**
    * Force immediate console output (useful for debugging)
    */
-  public static forceOutput = (message: string, color: 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' = 'cyan') => {
+  public static forceOutput = (message: string | Error, color: 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' = 'cyan') => {
+    const { message: processedMessage } = processMessage(message);
     const colorCode = colors[color] || colors.cyan;
-    console.log(`${colorCode}${message}${colors.reset}`);
+    console.log(`${colorCode}${processedMessage}${colors.reset}`);
     
     // Also log normally
     this.info(message);
